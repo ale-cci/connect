@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -41,7 +43,8 @@ func ReadConnections(connfile string) (connections map[string]ConnectionInfo, er
 		}
 
 		conn := ConnectionInfo{
-			Engine: "mysql",
+			Engine:   "mysql",
+			Database: "",
 		}
 
 		alias := ""
@@ -97,10 +100,11 @@ func main() {
 	r := bufio.NewReader(os.Stdin)
 
 	db, err := sql.Open("mysql", Connection{
-		Username: "corradiale",
-		Password: "password",
-		Host: info.Host,
-		Port: info.Port,
+		Username: "",
+		Password: "",
+		Host:     info.Host,
+		Port:     info.Port,
+		Database: info.Database,
 	}.Connstring())
 
 	if err != nil {
@@ -113,24 +117,32 @@ func main() {
 		fmt.Printf("> ")
 		cmd, err := parseCmd(r)
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
 			slog.Error("An error has occurred:", "err", err)
 		}
 		slog.Info("executing command", "cmd", cmd)
 
-		rows, err := db.Query(cmd)
+		result, err := runQuery(db, cmd)
+
+
 		if err != nil {
 			slog.Error("Error while running query:", "err", err)
-		} else if rows != nil {
-			for rows.Next() {
-				results := map[string]string{}
-				err := rows.Scan(results)
+		} else if result != nil {
 
-				if err != nil {
-					slog.Error("Error while reading query:", "err", err)
-				}
-				fmt.Printf("%v\n", results)
+			for _, hdr := range result.Headers {
+				fmt.Printf("%s\t", hdr)
 			}
-			
+			fmt.Print("\n")
+
+			for _, row := range result.Rows {
+				for _, item := range row {
+					fmt.Printf("%s\t", item)
+				}
+				fmt.Print("\n")
+			}
+
 		}
 	}
 }
