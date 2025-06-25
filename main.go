@@ -2,114 +2,21 @@ package main
 
 import (
 	"bufio"
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"os/user"
-	"path"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v2"
 
 	"database/sql"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
-type Credential struct {
-	Username string
-	Password string
-}
-
-func ConfigPath(filename string) string {
-    usr, _ := user.Current()
-    dir := usr.HomeDir
-    return path.Join(dir, ".config/connect", filename)
-}
-
-func ReadConnections(connfile string) (connections map[string]ConnectionInfo, err error) {
-	f, err := os.Open(connfile)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	reader := csv.NewReader(f)
-
-	header, err := reader.Read()
-	if err != nil {
-		return
-	}
-
-	connections = map[string]ConnectionInfo{}
-
-	for {
-		record, err := reader.Read()
-		if err != nil {
-			break
-		}
-
-		conn := ConnectionInfo{
-			Engine:   "mysql",
-			Database: "",
-		}
-
-		alias := ""
-		for i, value := range record {
-			slog.Debug("record", "r", value)
-			if header[i] == "Host" {
-				conn.Host = value
-			} else if header[i] == "User" {
-				conn.User = value
-			} else if header[i] == "Engine" {
-				conn.Engine = value
-			} else if header[i] == "Port" {
-				conn.Port = value
-			} else if header[i] == "Tunnel" {
-				conn.TunnelHost = value
-			} else if header[i] == "Alias" {
-				alias = value
-			} else if header[i] == "Database" {
-				conn.Database = value
-			}
-		}
-		if alias != "" {
-			connections[alias] = conn
-		}
-	}
-	return
-}
-
-type User struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-}
-type Credentials struct {
-	Users map[string]User `yaml:"users"`
-}
-
-func ReadCredentials(filepath string) (cred Credentials, err error) {
-	yamlFile, err := os.ReadFile(filepath)
-	if err != nil {
-		return
-	}
-	cred.Users = make(map[string]User)
-	err = yaml.Unmarshal(yamlFile, &cred)
-	return
-}
-
 func main() {
-	connections, err := ReadConnections(ConfigPath("conn.csv"))
-	if err != nil {
-		slog.Error("Failed to read config file", "err", err)
-		return
-	}
-
-	credentials, err := ReadCredentials(ConfigPath("users.yaml"))
+	config, err := LoadConfig(ConfigPath("config.yaml"))
 	if err != nil {
 		slog.Error("Failed to read config file", "err", err)
 		return
@@ -121,22 +28,22 @@ func main() {
 	}
 	alias := os.Args[1]
 
-	info, ok := connections[alias]
+	info, ok := config.Databases[alias]
 	if !ok {
 		slog.Error("Alias not found in config file", "alias", alias)
 		return
 	}
 	slog.Info("Starting connection to", "alias", alias)
 
-	if info.TunnelHost != "" {
-		slog.Info("Starting tunnel", "host", info.TunnelHost, "port", info.Port)
+	if info.Tunnel != "" {
+		slog.Info("Starting tunnel", "host", info.Tunnel, "port", info.Port)
 	}
 
 	r := bufio.NewReader(os.Stdin)
 
 	db, err := sql.Open("mysql", Connection{
-		Username: credentials.Users[info.User].Username,
-		Password: credentials.Users[info.User].Password,
+		Username: config.Credentials[info.UserAlias].Username,
+		Password: config.Credentials[info.UserAlias].Password,
 		Host:     info.Host,
 		Port:     info.Port,
 		Database: info.Database,
@@ -186,8 +93,8 @@ func display(result *ResultSet) {
 
 	printSep := func() {
 		fmt.Printf(" +")
-        for _, size := range colSize {
-			fmt.Print(strings.Repeat("-", size + 2), "+")
+		for _, size := range colSize {
+			fmt.Print(strings.Repeat("-", size+2), "+")
 		}
 		fmt.Print("\n")
 	}

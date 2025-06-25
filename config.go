@@ -3,16 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
-)
+	"os"
 
-type ConnectionInfo struct {
-	Engine     string
-	Host       string
-	Port       string
-	User       string
-	Database   string
-	TunnelHost string
-}
+	"gopkg.in/yaml.v2"
+	"os/user"
+	"path"
+)
 
 type Connection struct {
 	Username string
@@ -66,4 +62,39 @@ func runQuery(db *sql.DB, cmd string) (results *ResultSet, err error) {
 	}
 
 	return
+}
+
+type User struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
+type ConnectionInfo struct {
+	Engine    string `yaml:"engine"`
+	Host      string `yaml:"host"`
+	Port      int    `yaml:"port"`
+	UserAlias string `yaml:"alias"`
+	Database  string `yaml:"database"`
+	Tunnel    string `yaml:"tunnel"`
+}
+
+type Config struct {
+	Credentials map[string]User           `yaml:"credentials"`
+	Databases   map[string]ConnectionInfo `yaml:"databases"`
+}
+
+func LoadConfig(filepath string) (cnf Config, err error) {
+	yamlFile, err := os.ReadFile(filepath)
+	if err != nil {
+		return
+	}
+
+	err = yaml.Unmarshal(yamlFile, &cnf)
+	return
+}
+
+func ConfigPath(filename string) string {
+	usr, _ := user.Current()
+	dir := usr.HomeDir
+	return path.Join(dir, ".config/connect", filename)
 }
