@@ -13,10 +13,12 @@ import (
 	"database/sql"
 
 	_ "github.com/go-sql-driver/mysql"
+
+	"connect/pkg"
 )
 
 func main() {
-	config, err := LoadConfig(ConfigPath("config.yaml"))
+	config, err := pkg.LoadConfig(pkg.ConfigPath("config.yaml"))
 	if err != nil {
 		slog.Error("Failed to read config file", "err", err)
 		return
@@ -41,7 +43,7 @@ func main() {
 
 	r := bufio.NewReader(os.Stdin)
 
-	db, err := sql.Open("mysql", Connection{
+	db, err := sql.Open("mysql", pkg.Connection{
 		Username: config.Credentials[info.UserAlias].Username,
 		Password: config.Credentials[info.UserAlias].Password,
 		Host:     info.Host,
@@ -140,4 +142,46 @@ func parseCmd(r *bufio.Reader) (string, error) {
 	}
 
 	return strings.TrimSpace(string(cmd)), nil
+}
+
+func runQuery(db *sql.DB, cmd string) (results *ResultSet, err error) {
+	rows, err := db.Query(cmd)
+	if err != nil {
+		return
+	}
+
+	cols, _ := rows.Columns()
+
+	results = &ResultSet{}
+
+	for _, colname := range cols {
+		results.Headers = append(results.Headers, colname)
+	}
+
+	currentRow := make([]any, len(cols))
+	for idx := range cols {
+		var i []byte
+		currentRow[idx] = &i
+	}
+
+	for rows.Next() {
+		err := rows.Scan(currentRow...)
+
+		if err != nil {
+			return results, err
+		}
+
+		parsed := []string{}
+		for _, ptr := range currentRow {
+			parsed = append(parsed, string(*ptr.(*[]byte)))
+		}
+		results.Rows = append(results.Rows, parsed)
+	}
+
+	return
+}
+
+type ResultSet struct {
+	Headers []string
+	Rows    [][]string
 }
