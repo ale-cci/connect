@@ -27,12 +27,12 @@ type User struct {
 }
 
 type ConnectionInfo struct {
-	Engine    string `yaml:"engine"`
 	Host      string `yaml:"host"`
 	Port      int    `yaml:"port"`
 	UserAlias string `yaml:"alias"`
 	Database  string `yaml:"database"`
 	Tunnel    string `yaml:"tunnel"`
+	Driver    string `yaml:"driver"`
 }
 
 type Config struct {

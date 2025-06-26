@@ -57,6 +57,11 @@ func main() {
 	}
 	defer db.Close()
 
+    err = db.Ping()
+    if err != nil {
+        slog.Error(err.Error())
+        return
+    }
 	for {
 		fmt.Printf("> ")
 		cmd, err := parseCmd(r)
