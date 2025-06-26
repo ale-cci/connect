@@ -39,6 +39,21 @@ func main() {
 
 	if info.Tunnel != "" {
 		slog.Info("Starting tunnel", "host", info.Tunnel, "port", info.Port)
+		agent, err := pkg.AuthAgent()
+		if err != nil {
+			slog.Error("unable to connect to ssh agent", "err", err)
+			return
+		}
+
+		randomPort := 1234
+		pkg.TunnelInfo{
+			RemoteAddr: fmt.Sprintf("%s:%d", info.Host, info.Port),
+			LocalAddr:  fmt.Sprintf("127.0.0.1:%d", randomPort),
+			Agent:      agent,
+		}.Start()
+
+		info.Host = "127.0.0.1"
+		info.Port = randomPort
 	}
 
 	r := bufio.NewReader(os.Stdin)
