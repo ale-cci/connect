@@ -43,9 +43,15 @@ func main() {
 
 	r := bufio.NewReader(os.Stdin)
 
+    userAlias, ok := config.Credentials[info.UserAlias]
+    if !ok {
+        slog.Error("alias not configured", "alias", info.UserAlias)
+        os.Exit(1)
+    }
+
 	db, err := sql.Open("mysql", pkg.Connection{
-		Username: config.Credentials[info.UserAlias].Username,
-		Password: config.Credentials[info.UserAlias].Password,
+		Username: userAlias.Username,
+		Password: userAlias.Password,
 		Host:     info.Host,
 		Port:     info.Port,
 		Database: info.Database,
@@ -71,7 +77,7 @@ func main() {
 			}
 			slog.Error("An error has occurred:", "err", err)
 		}
-		slog.Info("executing command", "cmd", cmd)
+		slog.Debug("executing command", "cmd", cmd)
 
 		start := time.Now()
 		result, err := runQuery(db, cmd)
