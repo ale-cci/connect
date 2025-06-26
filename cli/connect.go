@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"net"
 
 	"database/sql"
 
@@ -42,15 +43,26 @@ func main() {
 		agent, err := pkg.AuthAgent()
 		if err != nil {
 			slog.Error("unable to connect to ssh agent", "err", err)
-			return
+			os.Exit(1)
 		}
 
 		randomPort := 1234
-		pkg.TunnelInfo{
+
+		localAddr := fmt.Sprintf("127.0.0.1:%d", randomPort)
+		listener, err := net.Listen("tcp", localAddr)
+		if err != nil {
+			slog.Error("failed to start local listener", "err", err)
+			os.Exit(1)
+		}
+
+		values := strings.SplitN(info.Tunnel, "@", 2)
+		defer listener.Close()
+		go pkg.TunnelInfo{
+			User:       values[0],
+			SshAddr:    fmt.Sprintf("%s:22", values[1]),
 			RemoteAddr: fmt.Sprintf("%s:%d", info.Host, info.Port),
-			LocalAddr:  fmt.Sprintf("127.0.0.1:%d", randomPort),
 			Agent:      agent,
-		}.Start()
+		}.Start(listener)
 
 		info.Host = "127.0.0.1"
 		info.Port = randomPort
@@ -58,11 +70,11 @@ func main() {
 
 	r := bufio.NewReader(os.Stdin)
 
-    userAlias, ok := config.Credentials[info.UserAlias]
-    if !ok {
-        slog.Error("alias not configured", "alias", info.UserAlias)
-        os.Exit(1)
-    }
+	userAlias, ok := config.Credentials[info.UserAlias]
+	if !ok {
+		slog.Error("alias not configured", "alias", info.UserAlias)
+		os.Exit(1)
+	}
 
 	db, err := sql.Open("mysql", pkg.Connection{
 		Username: userAlias.Username,
@@ -78,11 +90,12 @@ func main() {
 	}
 	defer db.Close()
 
-    err = db.Ping()
-    if err != nil {
-        slog.Error(err.Error())
-        return
-    }
+	slog.Info("pinging the database")
+	err = db.Ping()
+	if err != nil {
+		slog.Error(err.Error())
+		return
+	}
 	for {
 		fmt.Printf("> ")
 		cmd, err := parseCmd(r)
