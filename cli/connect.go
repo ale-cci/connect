@@ -114,10 +114,11 @@ func main() {
 		if err != nil {
 			slog.Error("Error while running query:", "err", err)
 		} else if result != nil {
-			display(result)
+			if len(result.Headers) > 0 {
+				display(result)
+			}
+			slog.Info("Execution completed", "elapsed", elapsed, "rows", len(result.Rows))
 		}
-
-		slog.Info("Execution completed", "elapsed", elapsed)
 	}
 }
 
