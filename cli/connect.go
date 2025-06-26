@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"strings"
 	"time"
-	"net"
 
 	"database/sql"
 
@@ -165,16 +165,21 @@ func display(result *ResultSet) {
 func parseCmd(r *bufio.Reader) (string, error) {
 	cmd := []byte{}
 
-	escape := false
+	var escapeChr byte = '\x00'
+
 	for {
 		chr, err := r.ReadByte()
 		if err != nil {
 			return "", err
 		}
 
-		if chr == '"' {
-			escape = !escape
-		} else if chr == ';' && !escape {
+		if chr == '"' || chr == '\'' {
+			if escapeChr == chr {
+				escapeChr = '\x00'
+			} else if escapeChr == '\x00' {
+				escapeChr = chr
+			}
+		} else if chr == ';' && escapeChr == '\x00' {
 			break
 		}
 
