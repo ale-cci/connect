@@ -3,6 +3,12 @@
 go install codeberg.org/ale-cci/connect/cmd/connect@latest
 go install codeberg.org/ale-cci/connect/cmd/connect-manager@latest
 ```
+
+# Setup
+```
+$ connect-manager import connection-file.csv
+$ connect database-alias
+```
 # TODO
 
 - [ ] funzione per effettuare dump
