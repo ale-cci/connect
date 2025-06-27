@@ -1,7 +1,7 @@
 package main
 
 import (
-	"connect/pkg"
+	"codeberg.org/ale-cci/connect/pkg"
 	"encoding/csv"
 	"errors"
     "io"

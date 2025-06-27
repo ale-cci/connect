@@ -17,7 +17,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"connect/pkg"
+	"codeberg.org/ale-cci/connect/pkg"
 )
 
 func main() {
