@@ -1,3 +1,8 @@
+# Installation
+```
+go install codeberg.org/ale-cci/connect/cmd/connect@latest
+go install codeberg.org/ale-cci/connect/cmd/connect-manager@latest
+```
 # TODO
 
 - [ ] funzione per effettuare dump
