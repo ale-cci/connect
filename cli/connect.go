@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net"
 	"os"
 	"strings"
 	"time"
+    "unicode"
 
 	"database/sql"
 
@@ -39,14 +41,13 @@ func main() {
 	slog.Info("Starting connection to", "alias", alias)
 
 	if info.Tunnel != "" {
-		slog.Info("Starting tunnel", "host", info.Tunnel, "port", info.Port)
+		randomPort := rand.Intn(1000) + 9000
+		slog.Info("Starting tunnel", "host", info.Tunnel, "port", info.Port, "localport", randomPort)
 		agent, err := pkg.AuthAgent()
 		if err != nil {
 			slog.Error("unable to connect to ssh agent", "err", err)
 			os.Exit(1)
 		}
-
-		randomPort := 1234
 
 		localAddr := fmt.Sprintf("127.0.0.1:%d", randomPort)
 		listener, err := net.Listen("tcp", localAddr)
@@ -148,6 +149,12 @@ func display(result *ResultSet) {
 	}
 
 	for i, hdr := range result.Headers {
+		hdr = strings.Map(func(r rune) rune {
+			if unicode.IsPrint(r) {
+				return r
+			}
+			return '•'
+		}, hdr)
 		fmt.Printf(fmts[i], hdr)
 	}
 	fmt.Print(" |\n")
