@@ -18,4 +18,8 @@ $ connect database-alias
 - [x] valutare anche singoli apici come carattere di escaping
 - [ ] in caso di typo mostrare N alias più simili / help per mostrare elenco alias
 
-https://ixday.github.io/post/golang_ssh_tunneling/
+# Implementato grazie a
+
+- https://elliotchance.medium.com/how-to-create-an-ssh-tunnel-in-go-b63722d682aa
+- https://ixday.github.io/post/golang_ssh_tunneling/
+
