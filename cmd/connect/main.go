@@ -38,7 +38,7 @@ func main() {
 		slog.Error("Alias not found in config file", "alias", alias)
 		return
 	}
-	slog.Info("Starting connection to", "alias", alias)
+	slog.Info("Starting connection to", "host", info.Host, "db", info.Database)
 
 	if info.Tunnel != "" {
 		randomPort := rand.Intn(1000) + 9000
@@ -77,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	db, err := sql.Open("mysql", pkg.Connection{
+	db, err := sql.Open(info.Driver, pkg.Connection{
 		Username: userAlias.Username,
 		Password: userAlias.Password,
 		Host:     info.Host,
@@ -170,12 +170,12 @@ func display(result *ResultSet) {
 }
 
 func parseCmd(r *bufio.Reader) (string, error) {
-	cmd := []byte{}
+	cmd := []rune{}
 
-	var escapeChr byte = '\x00'
+	var escapeChr rune = '\x00'
 
 	for {
-		chr, err := r.ReadByte()
+		chr, _, err := r.ReadRune()
 		if err != nil {
 			return "", err
 		}
@@ -186,6 +186,9 @@ func parseCmd(r *bufio.Reader) (string, error) {
 			} else if escapeChr == '\x00' {
 				escapeChr = chr
 			}
+		} else if chr == '\x1b' {
+			v, _, _:= r.ReadRune()
+			fmt.Printf("escape seq: %v", v)
 		} else if chr == ';' && escapeChr == '\x00' {
 			break
 		}

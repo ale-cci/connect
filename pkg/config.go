@@ -1,12 +1,15 @@
 package pkg
 
 import (
-	"fmt"
+	"bytes"
+	"net/url"
 	"os"
+	"strconv"
 
-	"gopkg.in/yaml.v2"
 	"os/user"
 	"path"
+
+	"gopkg.in/yaml.v2"
 )
 
 type Connection struct {
@@ -17,9 +20,35 @@ type Connection struct {
 	Database string
 }
 
+// [username[:password]@][protocol[(address)]]/dbname[?param1=value1&...&paramN=valueN]
 func (c Connection) Connstring() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", c.Username, c.Password, c.Host, c.Port, c.Database)
+	var buf bytes.Buffer
+
+	if len(c.Username) > 0 {
+		buf.WriteString(c.Username)
+		buf.WriteByte(':')
+		buf.WriteString(c.Password)
+		buf.WriteByte('@')
+	}
+	if c.Port == 0 {
+		buf.WriteString("unix")
+	} else {
+		buf.WriteString("tcp")
+	}
+
+	buf.WriteByte('(')
+	buf.WriteString(c.Host)
+	if c.Port != 0 {
+		buf.WriteByte(':')
+		buf.WriteString(strconv.Itoa(c.Port))
+	}
+	buf.WriteByte(')')
+
+	buf.WriteByte('/')
+	buf.WriteString(url.PathEscape(c.Database))
+	return buf.String()
 }
+
 
 type User struct {
 	Username string `yaml:"username"`
@@ -55,3 +84,4 @@ func ConfigPath(filename string) string {
 	dir := usr.HomeDir
 	return path.Join(dir, ".config/connect", filename)
 }
+

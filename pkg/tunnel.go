@@ -1,15 +1,28 @@
 package pkg
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
-	"fmt"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
+
+type Address struct {
+	Net string
+	Addr string
+}
+
+func addrFromString(addr string) Address {
+	if strings.Contains(addr, "/") {
+		return Address { Net: "unix", Addr: addr }
+	}
+	return Address { Net: "tcp",  Addr: addr }
+}
 
 type TunnelInfo struct {
 	User string
@@ -41,12 +54,16 @@ func (t TunnelInfo) forward(localConn net.Conn) error {
 		Auth: []ssh.AuthMethod{t.Agent},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
-	srvConn, err := ssh.Dial("tcp", t.SshAddr, &sshConfig)
+
+	sshAddr := addrFromString(t.SshAddr)
+
+	srvConn, err := ssh.Dial(sshAddr.Net, sshAddr.Addr, &sshConfig)
 	if err != nil {
 		return fmt.Errorf("unable to connect to ssh server: %v", err)
 	}
 
-	remoteConn, err := srvConn.Dial("tcp", t.RemoteAddr)
+	remoteAddr := addrFromString(t.RemoteAddr)
+	remoteConn, err := srvConn.Dial(remoteAddr.Net, remoteAddr.Addr)
 	if err != nil {
 		return fmt.Errorf("unable to connect to remote addr: %v", err)
 	}
@@ -64,10 +81,9 @@ func (t TunnelInfo) forward(localConn net.Conn) error {
 }
 
 
-const EnvSSHAuthSock = "SSH_AUTH_SOCK"
 
 func AuthAgent() (ssh.AuthMethod, error) {
-	conn, err := net.Dial("unix", os.Getenv(EnvSSHAuthSock))
+	conn, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
 	if err != nil {
 		return nil, err
 	}
