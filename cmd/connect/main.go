@@ -11,13 +11,14 @@ import (
 	"os"
 	"strings"
 	"time"
-    "unicode"
+	"unicode"
 
 	"database/sql"
 
 	_ "github.com/go-sql-driver/mysql"
 
 	"codeberg.org/ale-cci/connect/pkg"
+	"codeberg.org/ale-cci/connect/pkg/terminal"
 )
 
 func main() {
@@ -69,8 +70,6 @@ func main() {
 		info.Port = randomPort
 	}
 
-	r := bufio.NewReader(os.Stdin)
-
 	userAlias, ok := config.Credentials[info.UserAlias]
 	if !ok {
 		slog.Error("alias not configured", "alias", info.UserAlias)
@@ -97,9 +96,20 @@ func main() {
 		slog.Error(err.Error())
 		return
 	}
+
+	oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		panic(err)
+	}
+	defer terminal.Restore(int(os.Stdin.Fd()), oldState)
+
+	t := terminal.Terminal{
+		Input:  *bufio.NewReader(os.Stdin),
+		Output: os.Stdout,
+		Prompt: "> ",
+	}
 	for {
-		fmt.Printf("> ")
-		cmd, err := parseCmd(r)
+		cmd, err := t.ReadCmd()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
@@ -187,7 +197,7 @@ func parseCmd(r *bufio.Reader) (string, error) {
 				escapeChr = chr
 			}
 		} else if chr == '\x1b' {
-			v, _, _:= r.ReadRune()
+			v, _, _ := r.ReadRune()
 			fmt.Printf("escape seq: %v", v)
 		} else if chr == ';' && escapeChr == '\x00' {
 			break
