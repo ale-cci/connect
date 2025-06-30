@@ -1,7 +1,5 @@
 package terminal
 
-// package terminal
-
 import (
 	"bufio"
 	"errors"
@@ -37,7 +35,7 @@ const (
 )
 
 func (t *Terminal) ReadCmd() (cmd string, err error) {
-	command := [][]rune{[]rune{}}
+	command := [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
 
 	escapeRune := '\x00'
@@ -106,7 +104,6 @@ Loop:
 			if done {
 				break Loop
 			}
-
 
 		case KEY_BACKSPACE:
 			_, err = t.Input.ReadByte()
@@ -203,8 +200,9 @@ func isPrintable(r rune) bool {
 type State struct {
 	termios unix.Termios
 }
+
 func MakeRaw(fd int) (*State, error) {
-	termios, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +217,7 @@ func MakeRaw(fd int) (*State, error) {
 	termios.Cflag |= unix.CS8
 	termios.Cc[unix.VMIN] = 1
 	termios.Cc[unix.VTIME] = 0
-	if err := unix.IoctlSetTermios(fd, unix.TCSETS, termios); err != nil {
+	if err := unix.IoctlSetTermios(fd, ioctlWriteTermios, termios); err != nil {
 		return nil, err
 	}
 
@@ -227,5 +225,5 @@ func MakeRaw(fd int) (*State, error) {
 }
 
 func Restore(fd int, state *State) error {
-	return unix.IoctlSetTermios(fd, unix.TCSETS, &state.termios)
+	return unix.IoctlSetTermios(fd, ioctlWriteTermios, &state.termios)
 }
