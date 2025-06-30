@@ -1,7 +1,5 @@
 package terminal
 
-// package terminal
-
 import (
 	"bufio"
 	"errors"
@@ -106,7 +104,6 @@ Loop:
 			if done {
 				break Loop
 			}
-
 
 		case KEY_BACKSPACE:
 			_, err = t.Input.ReadByte()
