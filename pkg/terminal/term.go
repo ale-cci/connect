@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -24,7 +23,6 @@ type Terminal struct {
 
 	history []string
 }
-
 
 const (
 	CTRL_C = 'c' & 0x1f
@@ -52,12 +50,9 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 Loop:
 	for {
 		b, err := t.Input.Peek(1)
+
 		if err != nil {
-			if errors.Is(io.EOF, err) {
-				break Loop
-			} else {
-				return "", err
-			}
+			return "", err
 		}
 
 		switch b[0] {
@@ -152,7 +147,7 @@ Loop:
 	return builder.String(), nil
 }
 
-func (t *Terminal) parseEscape() (error) {
+func (t *Terminal) parseEscape() error {
 	b, err := t.Input.ReadByte()
 	if err != nil {
 		return err
