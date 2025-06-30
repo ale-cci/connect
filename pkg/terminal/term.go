@@ -78,7 +78,7 @@ Loop:
 			r := t.delRune(&command)
 
 			isWord := func(r rune) bool {
-				return unicode.IsLetter(r) || r == '_'
+				return unicode.IsLetter(r) || r == '_' || unicode.IsDigit(r)
 			}
 
 			wordDeleted := isWord(r)

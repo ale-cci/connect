@@ -54,6 +54,16 @@ func TestCommandReadInput(t *testing.T) {
 			input: "select 1234\x175;\r",
 			expect: "select 5;\n",
 		},
+		{
+			// test ctrl-w 2
+			input: "select \x17show tables;\r",
+			expect: "show tables;\n",
+		},
+		{
+			// test ctrl-w 3
+			input: "select 1\x17'test';\r",
+			expect: "select 'test';\n",
+		},
 	}
 
 	for _, test := range tt {
