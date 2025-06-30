@@ -3,5 +3,5 @@ package terminal
 
 import "golang.org/x/sys/unix"
 
-const ioReadTermios = unix.TCGETS
-const ioWriteTermios = unix.TCSETS
+const ioctlReadTermios = unix.TCGETS
+const ioctlWriteTermios = unix.TCSETS

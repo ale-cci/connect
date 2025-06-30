@@ -21,13 +21,21 @@ type Terminal struct {
 		line int
 		col  int
 	}
+
+	history []string
 }
+
 
 const (
 	CTRL_C = 'c' & 0x1f
 	CTRL_D = 'd' & 0x1f
 	CTRL_L = 'l' & 0x1f
 	CTRL_W = 'w' & 0x1f
+
+	CTRL_A = 'a' & 0x1f
+	CTRL_E = 'e' & 0x1f
+	CTRL_P = 'p' & 0x1f
+	CTRL_N = 'n' & 0x1f
 
 	KEY_ENTER     = 13
 	KEY_ESCAPE    = 27
@@ -52,7 +60,6 @@ Loop:
 			}
 		}
 
-		// fmt.Printf("read chr: %d\r\n", b)
 		switch b[0] {
 		case CTRL_C:
 			t.Input.ReadByte()
@@ -145,7 +152,27 @@ Loop:
 	return builder.String(), nil
 }
 
-func (t *Terminal) parseEscape() {
+func (t *Terminal) parseEscape() (error) {
+	b, err := t.Input.ReadByte()
+	if err != nil {
+		return err
+	}
+	if b == '[' {
+		b, err := t.Input.ReadByte()
+		if err != nil {
+			return err
+		}
+
+		switch b {
+		case 'D': // left
+		case 'A': // up
+		case 'C': // right
+		case 'B': // down
+		default:
+			fmt.Printf("<%d>", b)
+		}
+	}
+	return nil
 }
 
 func lastRune(command *[][]rune) rune {
