@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"testing"
+	"fmt"
 
 	"codeberg.org/ale-cci/connect/pkg/terminal"
 )
@@ -49,8 +50,8 @@ func TestCommandReadInput(t *testing.T) {
 			expect: "select 2;\n",
 		},
 		{
-			// test arrows left and right
-			input: "select 1\x1b[D2\x1b[DC;\r",
+			// 3. test arrows left and right
+			input: "select 1\x1b[D2\x1b[C;\r",
 			expect: "select 21;\n",
 		},
 		{
@@ -75,7 +76,8 @@ func TestCommandReadInput(t *testing.T) {
 		},
 	}
 
-	for _, test := range tt {
+	for i, test := range tt {
+		fmt.Printf("testing %d\n", i)
 		output := bytes.Buffer{}
 		inputBytes := []byte(test.input)
 

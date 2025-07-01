@@ -20,6 +20,7 @@ type Terminal struct {
 		row int
 		col int
 	}
+	display [][]rune
 
 	history []string
 }
@@ -41,7 +42,9 @@ const (
 )
 
 func (t *Terminal) ReadCmd() (cmd string, err error) {
-	command := [][]rune{{}}
+	t.pos.row = 0
+	t.pos.col = 0
+	t.display = [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
 
 	escapeRune := '\x00'
@@ -58,7 +61,7 @@ Loop:
 		switch b[0] {
 		case CTRL_C:
 			t.Input.ReadByte()
-			for t.delRune(&command) != '\x00' {
+			for t.delRune() != '\x00' {
 			}
 			return "", nil
 
@@ -75,7 +78,7 @@ Loop:
 		case CTRL_W:
 			t.Input.ReadByte()
 
-			r := t.delRune(&command)
+			r := t.delRune()
 
 			isWord := func(r rune) bool {
 				return unicode.IsLetter(r) || r == '_' || unicode.IsDigit(r)
@@ -84,10 +87,10 @@ Loop:
 			wordDeleted := isWord(r)
 
 			for r != '\x00' {
-				if !isWord(lastRune(&command)) && wordDeleted {
+				if !isWord(t.prevRune()) && wordDeleted {
 					break
 				}
-				r = t.delRune(&command)
+				r = t.delRune()
 				wordDeleted = wordDeleted || !unicode.IsSpace(r)
 			}
 
@@ -102,17 +105,25 @@ Loop:
 		case KEY_ENTER:
 			_, err = t.Input.ReadByte()
 			t.outBuf = append(t.outBuf, '\r', '\n')
-			command = append(command, []rune{'\n'})
+
+			newDisplay := append(
+				append(
+					t.display[:t.pos.row+1],
+					[]rune{'\n'},
+				),
+				t.display[t.pos.row+1:]...,
+			)
+			t.display = newDisplay
 			if done {
 				break Loop
 			}
 
 			t.pos.row += 1
-			t.pos.col = 0
+			t.pos.col = 1
 
 		case KEY_BACKSPACE:
 			_, err = t.Input.ReadByte()
-			t.delRune(&command)
+			t.delRune()
 
 		default:
 			r, _, err := t.Input.ReadRune()
@@ -120,8 +131,20 @@ Loop:
 				return "", err
 			}
 			if isPrintable(r) {
-				command[len(command)-1] = append(command[len(command)-1], r)
-				t.outBuf = append(t.outBuf, []byte(string([]rune{r}))...)
+				row := t.display[t.pos.row]
+
+				t.display[t.pos.row] = []rune(strings.Join(
+					[]string{
+						string(row[:t.pos.col]),
+						string(r),
+						string(row[t.pos.col:]),
+					},
+					"",
+				))
+
+				t.pos.col += 1
+
+				t.outBuf = append(t.outBuf, byte(r))
 
 				if r == '"' || r == '\'' {
 					if escapeRune == '\x00' {
@@ -140,11 +163,12 @@ Loop:
 		t.Output.Write(t.outBuf)
 		t.outBuf = []byte{}
 	}
+
 	t.Output.Write(t.outBuf)
 	t.outBuf = []byte{}
 
 	var builder strings.Builder
-	for _, line := range command {
+	for _, line := range t.display {
 		builder.WriteString(string(line))
 	}
 	return builder.String(), nil
@@ -163,9 +187,15 @@ func (t *Terminal) parseEscape() error {
 
 		switch b {
 		case 'D': // left
+			t.pos.col = max(0, t.pos.col-1)
 		case 'A': // up
+			t.pos.row = max(0, t.pos.row-1)
 		case 'C': // right
+			maxRight := len(t.display[t.pos.row]) + 1
+			t.pos.col = min(t.pos.col+1, maxRight)
 		case 'B': // down
+			maxDown := len(t.display) - 1
+			t.pos.row = min(t.pos.row+1, maxDown)
 		default:
 			fmt.Printf("<%d>", b)
 		}
@@ -173,45 +203,43 @@ func (t *Terminal) parseEscape() error {
 	return nil
 }
 
-func lastRune(command *[][]rune) rune {
-	line := (*command)[len(*command)-1]
-	if len(line) == 0 {
+func (t *Terminal) prevRune() rune {
+	if t.pos.col == 0 && t.pos.row == 0 {
 		return '\x00'
 	}
-	return line[len(line)-1]
+
+	if t.pos.col == 0 {
+		prevRow := t.display[t.pos.row-1]
+		return prevRow[len(prevRow)-1]
+	}
+
+	currentRow := t.display[t.pos.row]
+	return currentRow[len(currentRow)-1]
 }
 
-func (t *Terminal) delRune(command *[][]rune) rune {
-	current := (*command)[len(*command)-1]
-
-	toDel := '\x00'
-	if len(current) > 0 {
-		toDel = current[len(current)-1]
-
-		if toDel != '\n' {
-			t.outBuf = append(t.outBuf, KEY_ESCAPE, '[', '1', 'D')
-			t.outBuf = append(t.outBuf, ' ')
-			t.outBuf = append(t.outBuf, KEY_ESCAPE, '[', '1', 'D')
-
-			(*command)[len(*command)-1] = current[:len(current)-1]
-
-		} else {
-			// update the command, removing the last line
-			*command = (*command)[:len(*command)-1]
-			current = (*command)[len(*command)-1]
-
-			// move the cursor
-			t.outBuf = append(t.outBuf, []byte("\x1b[1A")...)
-
-			offset := len(current)
-			if len(*command) == 1 {
-				offset += len(t.Prompt) + 1
-			}
-
-			t.outBuf = append(t.outBuf, []byte(fmt.Sprintf("\x1b[%dC", offset-1))...)
-		}
+func (t *Terminal) delRune() rune {
+	if t.pos.col == 0 && t.pos.row == 0 {
+		return '\x00'
 	}
-	return toDel
+	if t.pos.col == 1 && t.pos.row > 0 {
+		t.display = append(t.display[:t.pos.row], t.display[t.pos.row+1:]...)
+		t.pos.row -= 1
+		t.pos.col = len(t.display[t.pos.row])
+
+		return '\n'
+	} else if t.pos.col > 0 {
+		currentRow := t.display[t.pos.row]
+		toDel := currentRow[t.pos.col-1]
+
+		t.display[t.pos.row] = append(
+			currentRow[:t.pos.col-1],
+			currentRow[t.pos.col:]...,
+		)
+
+		t.pos.col -= 1
+		return toDel
+	}
+	return '\x00'
 }
 
 func isPrintable(r rune) bool {
