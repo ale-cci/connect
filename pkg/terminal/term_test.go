@@ -40,6 +40,10 @@ func TestCommandReadInput(t *testing.T) {
 			expect: "select 1;\n",
 		},
 		{
+			input:  "select \r1;\r",
+			expect: "select \n1;\n",
+		},
+		{
 			// test backspace
 			input:  "select 1\x7f2;\r",
 			expect: "select 2;\n",
@@ -63,6 +67,11 @@ func TestCommandReadInput(t *testing.T) {
 			// test ctrl-w 3
 			input: "select 1\x17'test';\r",
 			expect: "select 'test';\n",
+		},
+		{
+			// test ctrl-a + ctrl-e
+			input: "elect 1;\x01s\x05\r",
+			expect: "select 1\n",
 		},
 	}
 

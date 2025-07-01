@@ -17,8 +17,8 @@ type Terminal struct {
 	outBuf []byte
 
 	pos struct {
-		line int
-		col  int
+		row int
+		col int
 	}
 
 	history []string
@@ -106,6 +106,9 @@ Loop:
 			if done {
 				break Loop
 			}
+
+			t.pos.row += 1
+			t.pos.col = 0
 
 		case KEY_BACKSPACE:
 			_, err = t.Input.ReadByte()
