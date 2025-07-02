@@ -199,7 +199,13 @@ Loop:
 	for _, line := range t.display {
 		builder.WriteString(string(line))
 	}
-	return builder.String(), nil
+
+	query := builder.String()
+	t.history = append(t.history, query)
+	if len(t.history) > 20 {
+		t.history = t.history[:20]
+	}
+	return query, nil
 }
 
 func (t *Terminal) parseEscape() error {
@@ -207,7 +213,13 @@ func (t *Terminal) parseEscape() error {
 	if err != nil {
 		return err
 	}
+	// https://en.wikipedia.org/wiki/ANSI_escape_code#CSIsection
 	if b == '[' {
+		// read any number of bytes between [0x30 - 0x3f]
+		// then any number of intermediates [0x20 - 0x2f]
+		// then a final byte [0x40 - 0x7E]
+		// arguments delimited by ;
+
 		b, err := t.Input.ReadByte()
 		if err != nil {
 			return err
@@ -215,17 +227,31 @@ func (t *Terminal) parseEscape() error {
 
 		switch b {
 		case 'D': // left
-			t.pos.col = max(0, t.pos.col-1)
-			t.outBuf = append(t.outBuf, []byte("\x1b[D")...)
+			if t.pos.col > 0 {
+				t.pos.col -= 1
+				t.outBuf = append(t.outBuf, []byte("\x1b[D")...)
+			}
 		case 'A': // up
-			t.pos.row = max(0, t.pos.row-1)
+			if t.pos.row > 0 {
+				t.pos.row -= 1
+				t.pos.col = min(t.pos.col, len(t.display[t.pos.row]))
+				t.outBuf = append(t.outBuf, []byte("\x1b[A")...)
+			}
 		case 'C': // right
 			maxRight := len(t.display[t.pos.row]) + 1
-			t.pos.col = min(t.pos.col+1, maxRight)
-			t.outBuf = append(t.outBuf, []byte("\x1b[C")...)
+
+			if t.pos.col < maxRight {
+				t.pos.col = t.pos.col+1
+				t.outBuf = append(t.outBuf, []byte("\x1b[C")...)
+			}
 		case 'B': // down
 			maxDown := len(t.display) - 1
-			t.pos.row = min(t.pos.row+1, maxDown)
+
+			if t.pos.row < maxDown {
+				t.pos.row += 1
+				t.pos.col = min(t.pos.col, len(t.display[t.pos.row]))
+				t.outBuf = append(t.outBuf, []byte("\x1b[B")...)
+			}
 		default:
 			fmt.Printf("<%d>", b)
 		}
