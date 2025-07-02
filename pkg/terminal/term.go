@@ -99,15 +99,21 @@ Loop:
 		case CTRL_A:
 			t.Input.ReadByte()
 			t.pos.col = 0
-            if t.pos.row == 0 {
-                t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", len(t.Prompt) + 1)
-            } else {
-                t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", 0)
-            }
+			if t.pos.row == 0 {
+				t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", len(t.Prompt)+1)
+			} else {
+				t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", 0)
+			}
 
 		case CTRL_E:
 			t.Input.ReadByte()
 			t.pos.col = len(t.display[t.pos.row])
+
+			pos := t.pos.col
+			if t.pos.row == 0 {
+				pos += len(t.Prompt)
+			}
+			t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", pos + 1)
 
 		case KEY_ESCAPE:
 			// parse escape seq.
@@ -150,19 +156,22 @@ Loop:
 			}
 			if isPrintable(r) {
 				row := t.display[t.pos.row]
+				after := row[t.pos.col:]
 
 				t.display[t.pos.row] = []rune(strings.Join(
 					[]string{
 						string(row[:t.pos.col]),
 						string(r),
-						string(row[t.pos.col:]),
+						string(after),
 					},
 					"",
 				))
 
+				t.outBuf = fmt.Appendf(t.outBuf, "%s%s", string(r), string(after))
+				if len(after) > 0 {
+					t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dD", len(after))
+				}
 				t.pos.col += 1
-
-				t.outBuf = append(t.outBuf, byte(r))
 
 				if r == '"' || r == '\'' {
 					if escapeRune == '\x00' {
@@ -207,13 +216,13 @@ func (t *Terminal) parseEscape() error {
 		switch b {
 		case 'D': // left
 			t.pos.col = max(0, t.pos.col-1)
-            t.outBuf = append(t.outBuf, []byte("\x1b[D")...)
+			t.outBuf = append(t.outBuf, []byte("\x1b[D")...)
 		case 'A': // up
 			t.pos.row = max(0, t.pos.row-1)
 		case 'C': // right
 			maxRight := len(t.display[t.pos.row]) + 1
 			t.pos.col = min(t.pos.col+1, maxRight)
-            t.outBuf = append(t.outBuf, []byte("\x1b[C")...)
+			t.outBuf = append(t.outBuf, []byte("\x1b[C")...)
 		case 'B': // down
 			maxDown := len(t.display) - 1
 			t.pos.row = min(t.pos.row+1, maxDown)
@@ -261,6 +270,7 @@ func (t *Terminal) delRune() rune {
 		return '\n'
 	} else {
 		currentRow := t.display[t.pos.row]
+		after := currentRow[t.pos.col-1:]
 		toDel := currentRow[t.pos.col-1]
 
 		t.display[t.pos.row] = slices.Delete(
@@ -268,7 +278,8 @@ func (t *Terminal) delRune() rune {
 		)
 
 		t.pos.col -= 1
-		t.outBuf = append(t.outBuf, []byte("\x1b[D \x1b[D")...)
+		t.outBuf = fmt.Appendf(t.outBuf, "\x1b[D%s \x1b[%dD", string(after), len(after))
+		// t.outBuf = append(t.outBuf, []byte("\x1b[D \x1b[D")...)
 		return toDel
 	}
 	return '\x00'

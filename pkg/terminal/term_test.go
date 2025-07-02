@@ -104,3 +104,6 @@ func TestCommandReadInput(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalOutput(t *testing.T) {
+}
