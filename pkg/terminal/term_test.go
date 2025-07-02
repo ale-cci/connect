@@ -3,8 +3,8 @@ package terminal_test
 import (
 	"bufio"
 	"bytes"
-	"testing"
 	"fmt"
+	"testing"
 
 	"codeberg.org/ale-cci/connect/pkg/terminal"
 )
@@ -51,30 +51,36 @@ func TestCommandReadInput(t *testing.T) {
 		},
 		{
 			// 3. test arrows left and right
-			input: "select 1\x1b[D2\x1b[C;\r",
+			input:  "select 1\x1b[D2\x1b[C;\r",
 			expect: "select 21;\n",
 		},
 		{
 			// test ctrl-w
-			input: "select 1234\x175;\r",
+			input:  "select 1234\x175;\r",
 			expect: "select 5;\n",
 		},
 		{
 			// test ctrl-w 2
-			input: "select \x17show tables;\r",
+			input:  "select \x17show tables;\r",
 			expect: "show tables;\n",
 		},
 		{
 			// test ctrl-w 3
-			input: "select 1\x17'test';\r",
+			input:  "select 1\x17'test';\r",
 			expect: "select 'test';\n",
 		},
 		{
 			// test ctrl-a + ctrl-e
-			input: "elect 1;\x01s\x05\r",
-			expect: "select 1\n",
+			input:  "elect 1;\x01s\x05\r",
+			expect: "select 1;\n",
+		},
+		{
+			// test ctrl-a + ctrl-e
+			input:  "abc\r\x7f\x7f\x7f\x7fI;\r",
+			expect: "I;\n",
 		},
 	}
+
 
 	for i, test := range tt {
 		fmt.Printf("testing %d\n", i)
@@ -96,6 +102,5 @@ func TestCommandReadInput(t *testing.T) {
 		if got != test.expect {
 			t.Errorf("expected command %q, got %q", test.expect, got)
 		}
-
 	}
 }

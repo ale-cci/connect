@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"golang.org/x/sys/unix"
+	"slices"
 )
 
 type Terminal struct {
@@ -46,6 +47,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.pos.col = 0
 	t.display = [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
+	t.outBuf = []byte{}
 
 	escapeRune := '\x00'
 	done := false
@@ -94,6 +96,19 @@ Loop:
 				wordDeleted = wordDeleted || !unicode.IsSpace(r)
 			}
 
+		case CTRL_A:
+			t.Input.ReadByte()
+			t.pos.col = 0
+            if t.pos.row == 0 {
+                t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", len(t.Prompt) + 1)
+            } else {
+                t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", 0)
+            }
+
+		case CTRL_E:
+			t.Input.ReadByte()
+			t.pos.col = len(t.display[t.pos.row])
+
 		case KEY_ESCAPE:
 			// parse escape seq.
 			_, err = t.Input.ReadByte()
@@ -106,20 +121,23 @@ Loop:
 			_, err = t.Input.ReadByte()
 			t.outBuf = append(t.outBuf, '\r', '\n')
 
-			newDisplay := append(
+			currentRow := t.display[t.pos.row]
+
+			t.display = append(
 				append(
-					t.display[:t.pos.row+1],
-					[]rune{'\n'},
+					t.display[:t.pos.row],
+					append(currentRow[:t.pos.col], '\n'),
+					currentRow[t.pos.col:],
 				),
 				t.display[t.pos.row+1:]...,
 			)
-			t.display = newDisplay
+
 			if done {
 				break Loop
 			}
 
 			t.pos.row += 1
-			t.pos.col = 1
+			t.pos.col = 0
 
 		case KEY_BACKSPACE:
 			_, err = t.Input.ReadByte()
@@ -164,8 +182,9 @@ Loop:
 		t.outBuf = []byte{}
 	}
 
-	t.Output.Write(t.outBuf)
-	t.outBuf = []byte{}
+	if len(t.outBuf) > 0 {
+		t.Output.Write(t.outBuf)
+	}
 
 	var builder strings.Builder
 	for _, line := range t.display {
@@ -188,11 +207,13 @@ func (t *Terminal) parseEscape() error {
 		switch b {
 		case 'D': // left
 			t.pos.col = max(0, t.pos.col-1)
+            t.outBuf = append(t.outBuf, []byte("\x1b[D")...)
 		case 'A': // up
 			t.pos.row = max(0, t.pos.row-1)
 		case 'C': // right
 			maxRight := len(t.display[t.pos.row]) + 1
 			t.pos.col = min(t.pos.col+1, maxRight)
+            t.outBuf = append(t.outBuf, []byte("\x1b[C")...)
 		case 'B': // down
 			maxDown := len(t.display) - 1
 			t.pos.row = min(t.pos.row+1, maxDown)
@@ -221,22 +242,33 @@ func (t *Terminal) delRune() rune {
 	if t.pos.col == 0 && t.pos.row == 0 {
 		return '\x00'
 	}
-	if t.pos.col == 1 && t.pos.row > 0 {
-		t.display = append(t.display[:t.pos.row], t.display[t.pos.row+1:]...)
+	if t.pos.col == 0 && t.pos.row > 0 {
+		t.display = slices.Delete(t.display, t.pos.row, t.pos.row+1)
 		t.pos.row -= 1
+		line := t.display[t.pos.row]
+		t.display[t.pos.row] = line[:len(line)-1]
+
 		t.pos.col = len(t.display[t.pos.row])
 
+		right := len(t.display[t.pos.row])
+
+		if t.pos.row == 0 {
+			right += len(t.Prompt)
+		}
+
+		t.outBuf = fmt.Appendf(t.outBuf, "\x1b[A\x1b[%dC", right)
+
 		return '\n'
-	} else if t.pos.col > 0 {
+	} else {
 		currentRow := t.display[t.pos.row]
 		toDel := currentRow[t.pos.col-1]
 
-		t.display[t.pos.row] = append(
-			currentRow[:t.pos.col-1],
-			currentRow[t.pos.col:]...,
+		t.display[t.pos.row] = slices.Delete(
+			currentRow, t.pos.col-1, t.pos.col,
 		)
 
 		t.pos.col -= 1
+		t.outBuf = append(t.outBuf, []byte("\x1b[D \x1b[D")...)
 		return toDel
 	}
 	return '\x00'
