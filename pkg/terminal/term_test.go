@@ -81,9 +81,7 @@ func TestCommandReadInput(t *testing.T) {
 		},
 	}
 
-
-	for i, test := range tt {
-		fmt.Printf("testing %d\n", i)
+	for _, test := range tt {
 		output := bytes.Buffer{}
 		inputBytes := []byte(test.input)
 
@@ -105,5 +103,29 @@ func TestCommandReadInput(t *testing.T) {
 	}
 }
 
-func TestTerminalOutput(t *testing.T) {
+
+func TestCursorPos(t *testing.T) {
+	tt := []struct {
+		text     string
+		nchar    int
+		expected int
+	}{
+		{ text: "asdf", nchar: 0, expected: 1},
+		{ text: "asdf", nchar: 1, expected: 2},
+		{ text: "asdf\n", nchar: 10, expected: 5},
+		{ text: "asdfe", nchar: 10, expected: 6},
+		{ text: "a\tb", nchar: 2, expected: 6},
+	}
+
+	for idx, tc := range tt {
+		t.Run(
+			fmt.Sprintf("TestCursorPos[%d]", idx),
+			func(t *testing.T) {
+				xpos := terminal.CursorPos([]rune(tc.text), tc.nchar)
+				if xpos != tc.expected {
+					t.Errorf("expected %d, got %d", tc.expected, xpos)
+				}
+			},
+		)
+	}
 }

@@ -15,7 +15,7 @@ type Terminal struct {
 	Input  bufio.Reader
 	Output io.Writer
 	Prompt string
-	outBuf []byte
+	buffer []byte
 
 	pos struct {
 		row int
@@ -47,7 +47,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.pos.col = 0
 	t.display = [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
-	t.outBuf = []byte{}
+	t.buffer = []byte{}
 
 	escapeRune := '\x00'
 	done := false
@@ -74,8 +74,8 @@ Loop:
 		case CTRL_L:
 			t.Input.ReadByte()
 
-			t.outBuf = append(t.outBuf, []byte("\x1b[2J")...)
-			t.outBuf = append(t.outBuf, []byte("\x1b[H")...)
+			t.buffer = append(t.buffer, []byte("\x1b[2J")...)
+			t.buffer = append(t.buffer, []byte("\x1b[H")...)
 
 		case CTRL_W:
 			t.Input.ReadByte()
@@ -100,20 +100,20 @@ Loop:
 			t.Input.ReadByte()
 			t.pos.col = 0
 			if t.pos.row == 0 {
-				t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", len(t.Prompt)+1)
+				t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", len(t.Prompt)+1)
 			} else {
-				t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", 0)
+				t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", 1)
 			}
 
 		case CTRL_E:
 			t.Input.ReadByte()
 			t.pos.col = len(t.display[t.pos.row])
 
-			pos := t.pos.col
+			cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
 			if t.pos.row == 0 {
-				pos += len(t.Prompt)
+				cursorX += len(t.Prompt)
 			}
-			t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dG", pos + 1)
+			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", cursorX)
 
 		case KEY_ESCAPE:
 			// parse escape seq.
@@ -125,7 +125,7 @@ Loop:
 
 		case KEY_ENTER:
 			_, err = t.Input.ReadByte()
-			t.outBuf = append(t.outBuf, '\r', '\n')
+			t.buffer = append(t.buffer, '\r', '\n')
 
 			currentRow := t.display[t.pos.row]
 
@@ -156,6 +156,8 @@ Loop:
 			}
 			if isPrintable(r) {
 				row := t.display[t.pos.row]
+
+				t.pos.col = min(t.pos.col, len(t.display[t.pos.row])) // move the value of col inbound
 				after := row[t.pos.col:]
 
 				t.display[t.pos.row] = []rune(strings.Join(
@@ -167,9 +169,9 @@ Loop:
 					"",
 				))
 
-				t.outBuf = fmt.Appendf(t.outBuf, "%s%s", string(r), string(after))
+				t.buffer = fmt.Appendf(t.buffer, "%s%s", string(r), string(after))
 				if len(after) > 0 {
-					t.outBuf = fmt.Appendf(t.outBuf, "\x1b[%dD", len(after))
+					t.buffer = fmt.Appendf(t.buffer, "\x1b[%dD", len(after))
 				}
 				t.pos.col += 1
 
@@ -187,13 +189,9 @@ Loop:
 				fmt.Printf("<%d>", r)
 			}
 		}
-		t.Output.Write(t.outBuf)
-		t.outBuf = []byte{}
+		t.flush()
 	}
-
-	if len(t.outBuf) > 0 {
-		t.Output.Write(t.outBuf)
-	}
+	t.flush()
 
 	var builder strings.Builder
 	for _, line := range t.display {
@@ -206,6 +204,11 @@ Loop:
 		t.history = t.history[:20]
 	}
 	return query, nil
+}
+
+func (t *Terminal) flush() {
+	t.Output.Write(t.buffer)
+	t.buffer = []byte{}
 }
 
 func (t *Terminal) parseEscape() error {
@@ -229,34 +232,62 @@ func (t *Terminal) parseEscape() error {
 		case 'D': // left
 			if t.pos.col > 0 {
 				t.pos.col -= 1
-				t.outBuf = append(t.outBuf, []byte("\x1b[D")...)
+				t.buffer = append(t.buffer, []byte("\x1b[D")...)
 			}
+
 		case 'A': // up
 			if t.pos.row > 0 {
 				t.pos.row -= 1
-				t.pos.col = min(t.pos.col, len(t.display[t.pos.row]))
-				t.outBuf = append(t.outBuf, []byte("\x1b[A")...)
+
+				cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
+				if t.pos.row == 0 {
+					cursorX += len(t.Prompt)
+				}
+				t.buffer = fmt.Appendf(t.buffer, "\x1b[A\x1b[%dG", cursorX)
 			}
+
 		case 'C': // right
-			maxRight := len(t.display[t.pos.row]) + 1
+			maxRight := len(t.display[t.pos.row])
 
 			if t.pos.col < maxRight {
-				t.pos.col = t.pos.col+1
-				t.outBuf = append(t.outBuf, []byte("\x1b[C")...)
+				t.pos.col = t.pos.col + 1
+				t.buffer = append(t.buffer, []byte("\x1b[C")...)
 			}
 		case 'B': // down
 			maxDown := len(t.display) - 1
 
 			if t.pos.row < maxDown {
 				t.pos.row += 1
-				t.pos.col = min(t.pos.col, len(t.display[t.pos.row]))
-				t.outBuf = append(t.outBuf, []byte("\x1b[B")...)
+				cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
+				if t.pos.row == 0 {
+					cursorX += len(t.Prompt)
+				}
+				t.buffer = fmt.Appendf(t.buffer, "\x1b[B\x1b[%dG", cursorX)
 			}
 		default:
 			fmt.Printf("<%d>", b)
 		}
 	}
 	return nil
+}
+
+func CursorPos(s []rune, nchars int) int {
+	column := 1
+	for i, chr := range s {
+		if i > nchars {
+			break
+		}
+		switch chr {
+		case '\n':
+			
+		case '\t':
+			tabSize := 4
+			column += (tabSize - (column-1)%tabSize)
+		default:
+			column += 1
+		}
+	}
+	return column
 }
 
 func (t *Terminal) prevRune() rune {
@@ -291,7 +322,7 @@ func (t *Terminal) delRune() rune {
 			right += len(t.Prompt)
 		}
 
-		t.outBuf = fmt.Appendf(t.outBuf, "\x1b[A\x1b[%dC", right)
+		t.buffer = fmt.Appendf(t.buffer, "\x1b[A\x1b[%dC", right)
 
 		return '\n'
 	} else {
@@ -304,8 +335,8 @@ func (t *Terminal) delRune() rune {
 		)
 
 		t.pos.col -= 1
-		t.outBuf = fmt.Appendf(t.outBuf, "\x1b[D%s \x1b[%dD", string(after), len(after))
-		// t.outBuf = append(t.outBuf, []byte("\x1b[D \x1b[D")...)
+		t.buffer = fmt.Appendf(t.buffer, "\x1b[D%s \x1b[%dD", string(after), len(after))
+		// t.buffer = append(t.buffer, []byte("\x1b[D \x1b[D")...)
 		return toDel
 	}
 	return '\x00'
