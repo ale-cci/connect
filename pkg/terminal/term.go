@@ -76,6 +76,12 @@ Loop:
 
 			t.buffer = append(t.buffer, []byte("\x1b[2J")...)
 			t.buffer = append(t.buffer, []byte("\x1b[H")...)
+			t.buffer = append(t.buffer, []byte(t.Prompt)...)
+			for _, row := range t.display {
+				t.buffer = append(t.buffer, []byte(string(row))...)
+			}
+
+			t.buffer = fmt.Appendf(t.buffer, "\x1b[%d;%dH", t.pos.row + 1, t.column())
 
 		case CTRL_W:
 			t.Input.ReadByte()
@@ -232,18 +238,12 @@ func (t *Terminal) parseEscape() error {
 		case 'D': // left
 			if t.pos.col > 0 {
 				t.pos.col -= 1
-				t.buffer = append(t.buffer, []byte("\x1b[D")...)
 			}
 
 		case 'A': // up
 			if t.pos.row > 0 {
 				t.pos.row -= 1
-
-				cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
-				if t.pos.row == 0 {
-					cursorX += len(t.Prompt)
-				}
-				t.buffer = fmt.Appendf(t.buffer, "\x1b[A\x1b[%dG", cursorX)
+				t.buffer = append(t.buffer, []byte("\x1b[A")...)
 			}
 
 		case 'C': // right
@@ -251,24 +251,33 @@ func (t *Terminal) parseEscape() error {
 
 			if t.pos.col < maxRight {
 				t.pos.col = t.pos.col + 1
-				t.buffer = append(t.buffer, []byte("\x1b[C")...)
 			}
 		case 'B': // down
 			maxDown := len(t.display) - 1
 
 			if t.pos.row < maxDown {
 				t.pos.row += 1
-				cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
-				if t.pos.row == 0 {
-					cursorX += len(t.Prompt)
-				}
-				t.buffer = fmt.Appendf(t.buffer, "\x1b[B\x1b[%dG", cursorX)
+				t.buffer = append(t.buffer, []byte("\x1b[B")...)
 			}
 		default:
 			fmt.Printf("<%d>", b)
 		}
 	}
+
+	cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
+	if t.pos.row == 0 {
+		cursorX += len(t.Prompt)
+	}
+	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", cursorX)
 	return nil
+}
+
+func (t *Terminal) column() int {
+	cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
+	if t.pos.row == 0 {
+		cursorX += len(t.Prompt)
+	}
+	return cursorX
 }
 
 func CursorPos(s []rune, nchars int) int {
