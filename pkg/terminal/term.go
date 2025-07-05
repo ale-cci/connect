@@ -49,11 +49,9 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.Output.Write([]byte(t.Prompt))
 	t.buffer = []byte{}
 
-	escapeRune := '\x00'
 	done := false
 
-Loop:
-	for {
+	for !done {
 		b, err := t.Input.Peek(1)
 
 		if err != nil {
@@ -135,8 +133,8 @@ Loop:
 				t.display[t.pos.row+1:]...,
 			)
 
-			if done {
-				break Loop
+			if t.isCommandComplete() {
+				done = true
 			}
 
 			t.pos.row += 1
@@ -165,27 +163,13 @@ Loop:
 					},
 					"",
 				))
+				t.pos.col += 1
 
 				if len(after) > 0 && after[len(after)-1] == '\n' {
 					after = after[:len(after)-1]
 				}
 
-				t.buffer = fmt.Appendf(t.buffer, "%s%s", string(r), string(after))
-				if len(after) > 0 {
-					t.buffer = fmt.Appendf(t.buffer, "\x1b[%dD", len(after))
-				}
-				t.pos.col += 1
-
-				if r == '"' || r == '\'' {
-					if escapeRune == '\x00' {
-						escapeRune = r
-					} else if escapeRune == r {
-						escapeRune = '\x00'
-					}
-
-				} else if r == ';' && escapeRune == '\x00' {
-					done = true
-				}
+				t.buffer = fmt.Appendf(t.buffer, "%s%s\x1b[0K\x1b[%dG", string(r), string(after), t.column())
 			} else {
 				fmt.Printf("<%d>", r)
 			}
@@ -194,12 +178,7 @@ Loop:
 	}
 	t.flush()
 
-	var builder strings.Builder
-	for _, line := range t.display {
-		builder.WriteString(string(line))
-	}
-
-	query := builder.String()
+	query := t.command()
 	t.history = append(t.history, query)
 	if len(t.history) > 20 {
 		t.history = t.history[:20]
@@ -210,6 +189,33 @@ Loop:
 func (t *Terminal) flush() {
 	t.Output.Write(t.buffer)
 	t.buffer = []byte{}
+}
+
+func (t *Terminal) command() string {
+	var builder strings.Builder
+	for _, line := range t.display {
+		builder.WriteString(string(line))
+	}
+	return builder.String()
+}
+
+
+func (t *Terminal) isCommandComplete() bool {
+	escapeRune := '\x00'
+	for _, line := range t.display {
+		for _, r := range line {
+			if r == '"' || r == '\'' {
+				if escapeRune == '\x00' {
+					escapeRune = r
+				} else if escapeRune == r {
+					escapeRune = '\x00'
+				}
+			} else if r == ';' && escapeRune == '\x00' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (t *Terminal) parseEscape() error {
