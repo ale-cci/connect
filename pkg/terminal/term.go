@@ -12,10 +12,11 @@ import (
 )
 
 type Terminal struct {
-	Input  bufio.Reader
-	Output io.Writer
-	Prompt string
-	buffer []byte
+	Input     bufio.Reader
+	Output    io.Writer
+	Prompt    string
+	buffer    []byte
+	historyId int
 
 	pos struct {
 		row int
@@ -36,6 +37,8 @@ const (
 	CTRL_E = 'e' & 0x1f
 	CTRL_P = 'p' & 0x1f
 	CTRL_N = 'n' & 0x1f
+	CTRL_S = 's' & 0x1f
+	CTRL_Q = 'q' & 0x1f
 
 	KEY_ENTER     = 13
 	KEY_ESCAPE    = 27
@@ -48,6 +51,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.display = [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
 	t.buffer = []byte{}
+	t.historyId = -1
 
 	done := false
 
@@ -65,6 +69,32 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			}
 			return "", nil
 
+		case CTRL_P:
+			t.Input.ReadByte()
+
+			if t.historyId < len(t.history) -1 {
+				t.clearCmd()
+				t.historyId += 1
+				t.loadCmd(t.history[t.historyId])
+				t.drawCmd()
+			}
+
+
+		case CTRL_N:
+			t.Input.ReadByte()
+
+			if t.historyId >= 0 {
+				t.historyId -= 1
+
+				t.clearCmd()
+				if t.historyId == -1 {
+					t.loadCmd("")
+				} else {
+					t.loadCmd(t.history[t.historyId])
+				}
+				t.drawCmd()
+			}
+
 		case CTRL_D:
 			t.Input.ReadByte()
 			return "", io.EOF
@@ -79,7 +109,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 				t.buffer = append(t.buffer, []byte(string(row))...)
 			}
 
-			t.buffer = fmt.Appendf(t.buffer, "\x1b[%d;%dH", t.pos.row + 1, t.column())
+			t.buffer = fmt.Appendf(t.buffer, "\x1b[%d;%dH", t.pos.row+1, t.column())
 
 		case CTRL_W:
 			t.Input.ReadByte()
@@ -181,7 +211,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	query := t.command()
 	t.history = append(t.history, query)
 	if len(t.history) > 20 {
-		t.history = t.history[:20]
+		t.history = t.history[len(t.history) -20:]
 	}
 	return query, nil
 }
@@ -191,6 +221,40 @@ func (t *Terminal) flush() {
 	t.buffer = []byte{}
 }
 
+func (t *Terminal) clearCmd() {
+	// goto first row and clear til end of screen
+	if t.pos.row >= 1 {
+		fmt.Appendf(t.buffer, "\x1b[%dA", t.pos.row)
+	}
+	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG\x1b[0J", len(t.Prompt) +1)
+}
+
+// expects the prompt to be at 0:0
+func (t *Terminal) drawCmd() {
+	for _, row := range t.display {
+		t.buffer = append(t.buffer, []byte(string(row))...)
+	}
+}
+
+func (t *Terminal) loadCmd(cmd string) {
+	// clear out display and update it
+	t.display = [][]rune{}
+
+	splits := strings.Split(cmd, "\n")
+	splits = splits[:len(splits)-1]
+
+	for idx, s := range splits {
+		row := []rune(s)
+		if idx < len(splits) -1 {
+			row = append(row, '\n')
+		}
+		t.display = append(t.display, row)
+	}
+
+	t.pos.row = len(t.display) -1
+	t.pos.col = len(t.display[t.pos.row])
+}
+
 func (t *Terminal) command() string {
 	var builder strings.Builder
 	for _, line := range t.display {
@@ -198,7 +262,6 @@ func (t *Terminal) command() string {
 	}
 	return builder.String()
 }
-
 
 func (t *Terminal) isCommandComplete() bool {
 	escapeRune := '\x00'
@@ -289,7 +352,7 @@ func CursorPos(s []rune, nchars int) int {
 		}
 		switch chr {
 		case '\n':
-			
+
 		case '\t':
 			tabSize := 4
 			column += (tabSize - (column-1)%tabSize)
