@@ -166,6 +166,10 @@ Loop:
 					"",
 				))
 
+				if len(after) > 0 && after[len(after)-1] == '\n' {
+					after = after[:len(after)-1]
+				}
+
 				t.buffer = fmt.Appendf(t.buffer, "%s%s", string(r), string(after))
 				if len(after) > 0 {
 					t.buffer = fmt.Appendf(t.buffer, "\x1b[%dD", len(after))
