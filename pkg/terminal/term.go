@@ -105,21 +105,12 @@ Loop:
 		case CTRL_A:
 			t.Input.ReadByte()
 			t.pos.col = 0
-			if t.pos.row == 0 {
-				t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", len(t.Prompt)+1)
-			} else {
-				t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", 1)
-			}
+			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column())
 
 		case CTRL_E:
 			t.Input.ReadByte()
 			t.pos.col = len(t.display[t.pos.row])
-
-			cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
-			if t.pos.row == 0 {
-				cursorX += len(t.Prompt)
-			}
-			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", cursorX)
+			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column())
 
 		case KEY_ESCAPE:
 			// parse escape seq.
@@ -275,7 +266,7 @@ func (t *Terminal) parseEscape() error {
 func (t *Terminal) column() int {
 	cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
 	if t.pos.row == 0 {
-		cursorX += len(t.Prompt)
+		cursorX += len(t.Prompt) // 2 "> "
 	}
 	return cursorX
 }
@@ -283,7 +274,7 @@ func (t *Terminal) column() int {
 func CursorPos(s []rune, nchars int) int {
 	column := 1
 	for i, chr := range s {
-		if i > nchars {
+		if i >= nchars {
 			break
 		}
 		switch chr {

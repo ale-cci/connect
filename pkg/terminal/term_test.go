@@ -103,18 +103,18 @@ func TestCommandReadInput(t *testing.T) {
 	}
 }
 
-
 func TestCursorPos(t *testing.T) {
 	tt := []struct {
 		text     string
 		nchar    int
 		expected int
 	}{
-		{ text: "asdf", nchar: 0, expected: 1},
-		{ text: "asdf", nchar: 1, expected: 2},
-		{ text: "asdf\n", nchar: 10, expected: 5},
-		{ text: "asdfe", nchar: 10, expected: 6},
-		{ text: "a\tb", nchar: 2, expected: 6},
+		{text: "asdf", nchar: 0, expected: 1},    // 0.
+		{text: "asdf", nchar: 1, expected: 2},    // 1.
+		{text: "asdf\n", nchar: 10, expected: 5}, // 2.
+		{text: "asdfe", nchar: 10, expected: 6},  // 3.
+		{text: "a\tb", nchar: 2, expected: 5},    // 4.
+		{text: "a\tb", nchar: 3, expected: 6},    // 5.
 	}
 
 	for idx, tc := range tt {
