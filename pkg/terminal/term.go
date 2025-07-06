@@ -145,6 +145,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		case KEY_ESCAPE:
 			// parse escape seq.
 			_, err = t.Input.ReadByte()
+
 			if err != nil {
 				return "", err
 			}
@@ -330,6 +331,26 @@ func (t *Terminal) parseEscape() error {
 			}
 		default:
 			fmt.Printf("<%d>", b)
+		}
+
+	} else {
+		switch b {
+		case 'b':
+			// previous word in line
+			for ; t.pos.col > 0 ; t.pos.col -= 1 {
+				if unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
+					break
+				}
+			}
+		case 'f':
+			// next workd in line
+			for ; t.pos.col < len(t.display[t.pos.row]) -1 ; t.pos.col += 1 {
+				if unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
+					break
+				}
+			}
+		default:
+			// alt - key combination
 		}
 	}
 
