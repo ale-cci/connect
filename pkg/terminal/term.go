@@ -74,7 +74,9 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			if t.historyId < len(t.history) -1 {
 				t.clearCmd()
 				t.historyId += 1
-				t.loadCmd(t.history[t.historyId])
+
+				histCmd := t.history[len(t.history) -1 - t.historyId]
+				t.loadCmd(histCmd)
 				t.drawCmd()
 			}
 
@@ -89,7 +91,8 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 				if t.historyId == -1 {
 					t.loadCmd("")
 				} else {
-					t.loadCmd(t.history[t.historyId])
+					histCmd := t.history[len(t.history) -1 - t.historyId]
+					t.loadCmd(histCmd)
 				}
 				t.drawCmd()
 			}
