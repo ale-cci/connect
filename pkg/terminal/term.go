@@ -65,8 +65,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		switch b[0] {
 		case CTRL_C:
 			t.Input.ReadByte()
-			for t.delRune() != '\x00' {
-			}
+			t.clearCmd()
 			return "", nil
 
 		case CTRL_P:
@@ -151,24 +150,24 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		case KEY_ENTER:
 			_, err = t.Input.ReadByte()
 			t.buffer = append(t.buffer, '\r', '\n')
-
-			currentRow := t.display[t.pos.row]
-
-			t.display = append(
-				append(
-					t.display[:t.pos.row],
-					append(currentRow[:t.pos.col], '\n'),
-					currentRow[t.pos.col:],
-				),
-				t.display[t.pos.row+1:]...,
-			)
-
 			if t.isCommandComplete() {
 				done = true
-			}
+			} else {
+				currentRow := t.display[t.pos.row]
 
-			t.pos.row += 1
-			t.pos.col = 0
+				t.display = append(
+					append(
+						t.display[:t.pos.row],
+						append(currentRow[:t.pos.col], '\n'),
+						currentRow[t.pos.col:],
+					),
+					t.display[t.pos.row+1:]...,
+				)
+
+
+				t.pos.row += 1
+				t.pos.col = 0
+			}
 
 		case KEY_BACKSPACE:
 			_, err = t.Input.ReadByte()
@@ -194,12 +193,16 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 					"",
 				))
 				t.pos.col += 1
+				t.buffer = append(t.buffer, []byte(string(r))...)
 
 				if len(after) > 0 && after[len(after)-1] == '\n' {
 					after = after[:len(after)-1]
 				}
 
-				t.buffer = fmt.Appendf(t.buffer, "%s%s\x1b[0K\x1b[%dG", string(r), string(after), t.column())
+				if len(after) > 0 {
+					t.buffer = fmt.Appendf(t.buffer, "%s\x1b[0K\x1b[%dG", string(after), t.column())
+				}
+
 			} else {
 				fmt.Printf("<%d>", r)
 			}
@@ -224,7 +227,7 @@ func (t *Terminal) flush() {
 func (t *Terminal) clearCmd() {
 	// goto first row and clear til end of screen
 	if t.pos.row >= 1 {
-		fmt.Appendf(t.buffer, "\x1b[%dA", t.pos.row)
+		t.buffer = fmt.Appendf(t.buffer, "\x1b[%dA", t.pos.row)
 	}
 	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG\x1b[0J", len(t.Prompt) +1)
 }
@@ -241,7 +244,6 @@ func (t *Terminal) loadCmd(cmd string) {
 	t.display = [][]rune{}
 
 	splits := strings.Split(cmd, "\n")
-	splits = splits[:len(splits)-1]
 
 	for idx, s := range splits {
 		row := []rune(s)
@@ -381,22 +383,26 @@ func (t *Terminal) delRune() rune {
 	if t.pos.col == 0 && t.pos.row == 0 {
 		return '\x00'
 	}
+
 	if t.pos.col == 0 && t.pos.row > 0 {
+		t.clearCmd()
+
+		currLine := t.display[t.pos.row]
+
 		t.display = slices.Delete(t.display, t.pos.row, t.pos.row+1)
+
 		t.pos.row -= 1
 		line := t.display[t.pos.row]
-		t.display[t.pos.row] = line[:len(line)-1]
+		t.display[t.pos.row] = append(line[:len(line)-1], currLine...)
 
-		t.pos.col = len(t.display[t.pos.row])
+		t.pos.col = len(line) -1
 
-		right := len(t.display[t.pos.row])
-
-		if t.pos.row == 0 {
-			right += len(t.Prompt)
+		moveUp := len(t.display) -1 - t.pos.row
+		t.drawCmd()
+		if moveUp  > 0 {
+			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dA", moveUp)
 		}
-
-		t.buffer = fmt.Appendf(t.buffer, "\x1b[A\x1b[%dC", right)
-
+		t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column()) // move up to eol
 		return '\n'
 	} else {
 		currentRow := t.display[t.pos.row]
@@ -409,10 +415,8 @@ func (t *Terminal) delRune() rune {
 
 		t.pos.col -= 1
 		t.buffer = fmt.Appendf(t.buffer, "\x1b[D%s \x1b[%dD", string(after), len(after))
-		// t.buffer = append(t.buffer, []byte("\x1b[D \x1b[D")...)
 		return toDel
 	}
-	return '\x00'
 }
 
 func isPrintable(r rune) bool {
