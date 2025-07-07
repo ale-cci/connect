@@ -60,7 +60,6 @@ type Terminal struct {
 	Output    io.Writer
 	Prompt    string
 	buffer    []byte
-	historyId int
 
 	pos struct {
 		row int
