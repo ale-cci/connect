@@ -34,6 +34,15 @@ func main() {
 	}
 	alias := os.Args[1]
 
+	if alias == "--completions" {
+		aliases := []string{}
+		for name := range config.Databases {
+			aliases = append(aliases, name)
+		}
+		fmt.Printf("%s", strings.Join(aliases, " "))
+		os.Exit(0)
+	}
+
 	info, ok := config.Databases[alias]
 	if !ok {
 		slog.Error("Alias not found in config file", "alias", alias)
