@@ -71,15 +71,14 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		case CTRL_P:
 			t.Input.ReadByte()
 
-			if t.historyId < len(t.history) -1 {
+			if t.historyId < len(t.history)-1 {
 				t.clearCmd()
 				t.historyId += 1
 
-				histCmd := t.history[len(t.history) -1 - t.historyId]
+				histCmd := t.history[len(t.history)-1-t.historyId]
 				t.loadCmd(histCmd)
 				t.drawCmd()
 			}
-
 
 		case CTRL_N:
 			t.Input.ReadByte()
@@ -91,7 +90,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 				if t.historyId == -1 {
 					t.loadCmd("")
 				} else {
-					histCmd := t.history[len(t.history) -1 - t.historyId]
+					histCmd := t.history[len(t.history)-1-t.historyId]
 					t.loadCmd(histCmd)
 				}
 				t.drawCmd()
@@ -168,7 +167,6 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 					t.display[t.pos.row+1:]...,
 				)
 
-
 				t.pos.row += 1
 				t.pos.col = 0
 			}
@@ -218,7 +216,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	query := t.command()
 	t.history = append(t.history, query)
 	if len(t.history) > 20 {
-		t.history = t.history[len(t.history) -20:]
+		t.history = t.history[len(t.history)-20:]
 	}
 	return query, nil
 }
@@ -233,7 +231,7 @@ func (t *Terminal) clearCmd() {
 	if t.pos.row >= 1 {
 		t.buffer = fmt.Appendf(t.buffer, "\x1b[%dA", t.pos.row)
 	}
-	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG\x1b[0J", len(t.Prompt) +1)
+	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG\x1b[0J", len(t.Prompt)+1)
 }
 
 // expects the prompt to be at 0:0
@@ -251,13 +249,13 @@ func (t *Terminal) loadCmd(cmd string) {
 
 	for idx, s := range splits {
 		row := []rune(s)
-		if idx < len(splits) -1 {
+		if idx < len(splits)-1 {
 			row = append(row, '\n')
 		}
 		t.display = append(t.display, row)
 	}
 
-	t.pos.row = len(t.display) -1
+	t.pos.row = len(t.display) - 1
 	t.pos.col = len(t.display[t.pos.row])
 }
 
@@ -336,15 +334,31 @@ func (t *Terminal) parseEscape() error {
 	} else {
 		switch b {
 		case 'b':
-			// previous word in line
-			for ; t.pos.col > 0 ; t.pos.col -= 1 {
-				if unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
+			// back until whitespace
+			for ; t.pos.col > 0; t.pos.col -= 1 {
+				if unicode.IsSpace(t.display[t.pos.row][t.pos.col-1]) {
 					break
 				}
 			}
+
+			// back until a word
+			for ; t.pos.col > 0; t.pos.col -= 1 {
+				c := t.display[t.pos.row][t.pos.col-1]
+				if !unicode.IsSpace(c) {
+					break
+				}
+			}
+
 		case 'f':
-			// next workd in line
-			for ; t.pos.col < len(t.display[t.pos.row]) -1 ; t.pos.col += 1 {
+			// forward until end of word
+			for ; t.pos.col < len(t.display[t.pos.row])-1; t.pos.col += 1 {
+				if !unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
+					break
+				}
+			}
+
+            // forward until end of spaces
+			for ; t.pos.col < len(t.display[t.pos.row])-1; t.pos.col += 1 {
 				if unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
 					break
 				}
@@ -419,11 +433,11 @@ func (t *Terminal) delRune() rune {
 		line := t.display[t.pos.row]
 		t.display[t.pos.row] = append(line[:len(line)-1], currLine...)
 
-		t.pos.col = len(line) -1
+		t.pos.col = len(line) - 1
 
-		moveUp := len(t.display) -1 - t.pos.row
+		moveUp := len(t.display) - 1 - t.pos.row
 		t.drawCmd()
-		if moveUp  > 0 {
+		if moveUp > 0 {
 			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dA", moveUp)
 		}
 		t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column()) // move up to eol
