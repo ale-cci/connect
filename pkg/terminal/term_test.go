@@ -79,19 +79,19 @@ func TestCommandReadInput(t *testing.T) {
 			expect: "I;",
 		},
 		{
-			input: "select\r * from utenti;\x01\x7f\r",
+			input:  "select\r * from utenti;\x01\x7f\r",
 			expect: "select * from utenti;",
 		},
 		{
-			input: "select bc;\x1bba\r",
+			input:  "select bc;\x1bba\r",
 			expect: "select abc;",
 		},
 		{
-			input: "select bc   \x1bba\x05;\r",
+			input:  "select bc   \x1bba\x05;\r",
 			expect: "select abc   ;",
 		},
 		{
-			input: "selec  bc;\x01\x1bft\r",
+			input:  "selec  bc;\x01\x1bft\r",
 			expect: "select  bc;",
 		},
 	}
@@ -151,7 +151,7 @@ func TestTermOutput(t *testing.T) {
 		expect string
 	}{
 		{
-			input: "abc;\r",
+			input:  "abc;\r",
 			expect: "> abc;\r\n",
 		},
 	}
@@ -159,12 +159,12 @@ func TestTermOutput(t *testing.T) {
 	for idx, tc := range tt {
 		t.Run(
 			fmt.Sprintf("TestTermOutput[%d]", idx),
-			func (t *testing.T) {
+			func(t *testing.T) {
 				input := bytes.NewBuffer([]byte(tc.input))
 				output := bytes.Buffer{}
 
 				term := terminal.Terminal{
-					Input: *bufio.NewReader(input),
+					Input:  *bufio.NewReader(input),
 					Output: &output,
 					Prompt: "> ",
 				}
@@ -181,5 +181,29 @@ func TestTermOutput(t *testing.T) {
 				}
 			},
 		)
+	}
+}
+
+func TestPreviousWithoutValuesReturnsNothing(t *testing.T) {
+	h := terminal.History{}
+
+	_, err := h.Previous()
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
+}
+
+
+func TestPreviousReturnsItem(t *testing.T) {
+	h := terminal.History{}
+	h.Add("sample")
+
+	cmd, err := h.Previous()
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
+	}
+
+	if cmd != "sample" {
+		t.Errorf("expected command, got %v", cmd)
 	}
 }

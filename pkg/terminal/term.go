@@ -11,6 +11,50 @@ import (
 	"slices"
 )
 
+type History struct {
+	Strings []string
+	idx     int
+	Size    int
+}
+
+func (h *History) Previous() (string, error) {
+	i := h.idx
+	if i < 0 || i >= len(h.Strings) {
+		return "", fmt.Errorf("no more commands")
+	}
+
+	result := h.Strings[len(h.Strings)-1-i]
+	h.idx += 1
+	return result, nil
+}
+
+func (h *History) Next() (string, error) {
+	i := h.idx - 2
+	if i == -1 {
+		h.idx -= 1
+		return "", nil
+	}
+	if i < 0 || i >= len(h.Strings) {
+		return "", fmt.Errorf("no more commands")
+	}
+	result := h.Strings[len(h.Strings)-1-i]
+	h.idx -= 1
+	return result, nil
+}
+
+func (h *History) ResetCounter() {
+	h.idx = 0
+}
+
+func (h *History) Add(s string) {
+	h.Strings = append(h.Strings, s)
+
+	// trim history
+	if h.Size > 0 {
+		h.Strings = h.Strings[len(h.Strings)-h.Size:]
+	}
+}
+
 type Terminal struct {
 	Input     bufio.Reader
 	Output    io.Writer
@@ -24,7 +68,7 @@ type Terminal struct {
 	}
 	display [][]rune
 
-	history []string
+	history History
 }
 
 const (
@@ -51,7 +95,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.display = [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
 	t.buffer = []byte{}
-	t.historyId = -1
+	t.history.ResetCounter()
 
 	done := false
 
@@ -71,28 +115,20 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		case CTRL_P:
 			t.Input.ReadByte()
 
-			if t.historyId < len(t.history)-1 {
+			cmd, err := t.history.Previous()
+			if err == nil {
 				t.clearCmd()
-				t.historyId += 1
-
-				histCmd := t.history[len(t.history)-1-t.historyId]
-				t.loadCmd(histCmd)
+				t.loadCmd(cmd)
 				t.drawCmd()
 			}
 
 		case CTRL_N:
 			t.Input.ReadByte()
 
-			if t.historyId >= 0 {
-				t.historyId -= 1
-
+			cmd, err := t.history.Next()
+			if err == nil {
 				t.clearCmd()
-				if t.historyId == -1 {
-					t.loadCmd("")
-				} else {
-					histCmd := t.history[len(t.history)-1-t.historyId]
-					t.loadCmd(histCmd)
-				}
+				t.loadCmd(cmd)
 				t.drawCmd()
 			}
 
@@ -180,6 +216,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			if err != nil {
 				return "", err
 			}
+
 			if isPrintable(r) {
 				row := t.display[t.pos.row]
 
@@ -214,10 +251,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.flush()
 
 	query := t.command()
-	t.history = append(t.history, query)
-	if len(t.history) > 20 {
-		t.history = t.history[len(t.history)-20:]
-	}
+	t.history.Add(query)
 	return query, nil
 }
 
@@ -351,14 +385,14 @@ func (t *Terminal) parseEscape() error {
 			}
 
 		case 'f':
-			// forward until next char is a 
+			// forward until next char is a
 			for ; t.pos.col < len(t.display[t.pos.row])-1; t.pos.col += 1 {
 				if !unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
 					break
 				}
 			}
 
-            // forward until end of spaces
+			// forward until end of spaces
 			for ; t.pos.col < len(t.display[t.pos.row])-1; t.pos.col += 1 {
 				if unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
 					break
