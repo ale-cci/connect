@@ -82,6 +82,18 @@ func TestCommandReadInput(t *testing.T) {
 			input: "select\r * from utenti;\x01\x7f\r",
 			expect: "select * from utenti;",
 		},
+		{
+			input: "select bc;\x1bba\r",
+			expect: "select abc;",
+		},
+		{
+			input: "select bc   \x1bba\x05;\r",
+			expect: "select abc   ;",
+		},
+		{
+			input: "selec  bc;\x01\x1bft\r",
+			expect: "select  bc;",
+		},
 	}
 
 	for _, test := range tt {
@@ -140,7 +152,7 @@ func TestTermOutput(t *testing.T) {
 	}{
 		{
 			input: "abc;\r",
-			expect: "> abc;\r",
+			expect: "> abc;\r\n",
 		},
 	}
 

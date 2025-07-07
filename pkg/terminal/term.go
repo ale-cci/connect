@@ -336,21 +336,22 @@ func (t *Terminal) parseEscape() error {
 		case 'b':
 			// back until whitespace
 			for ; t.pos.col > 0; t.pos.col -= 1 {
-				if unicode.IsSpace(t.display[t.pos.row][t.pos.col-1]) {
+				if !unicode.IsSpace(t.display[t.pos.row][t.pos.col-1]) {
 					break
 				}
 			}
 
-			// back until a word
+			// return back until previous character is a whitespace
 			for ; t.pos.col > 0; t.pos.col -= 1 {
 				c := t.display[t.pos.row][t.pos.col-1]
-				if !unicode.IsSpace(c) {
+
+				if unicode.IsSpace(c) {
 					break
 				}
 			}
 
 		case 'f':
-			// forward until end of word
+			// forward until next char is a 
 			for ; t.pos.col < len(t.display[t.pos.row])-1; t.pos.col += 1 {
 				if !unicode.IsSpace(t.display[t.pos.row][t.pos.col]) {
 					break
