@@ -17,6 +17,7 @@ $ connect database-alias
 - [x] gestione di tunnel
 - [x] valutare anche singoli apici come carattere di escaping
 - [ ] in caso di typo mostrare N alias più simili / help per mostrare elenco alias
+- [ ] Reverse history search
 
 # Implementato grazie a
 
