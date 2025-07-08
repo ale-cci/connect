@@ -56,10 +56,10 @@ func (h *History) Add(s string) {
 }
 
 type Terminal struct {
-	Input     bufio.Reader
-	Output    io.Writer
-	Prompt    string
-	buffer    []byte
+	Input  bufio.Reader
+	Output io.Writer
+	Prompt string
+	buffer []byte
 
 	pos struct {
 		row int
@@ -187,23 +187,38 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 
 		case KEY_ENTER:
 			_, err = t.Input.ReadByte()
-			t.buffer = append(t.buffer, '\r', '\n')
 			if t.isCommandComplete() {
+				t.buffer = append(t.buffer, '\r', '\n')
 				done = true
 			} else {
+				t.clearCmd()
+				t.pos.col = min(t.pos.col, len(t.display[t.pos.row]) + 1)
+
 				currentRow := t.display[t.pos.row]
+
+				var after []rune
+				var pre []rune
+
+				if t.pos.col == len(currentRow) +1 {
+					pre = append(currentRow, '\n')
+                    after = []rune{}
+				} else {
+					pre = append(currentRow[:t.pos.col], '\n')
+					after = currentRow[t.pos.col:]
+				}
 
 				t.display = append(
 					append(
 						t.display[:t.pos.row],
-						append(currentRow[:t.pos.col], '\n'),
-						currentRow[t.pos.col:],
+						pre,
+						after,
 					),
 					t.display[t.pos.row+1:]...,
 				)
 
 				t.pos.row += 1
 				t.pos.col = 0
+				t.drawCmd()
 			}
 
 		case KEY_BACKSPACE:
@@ -272,6 +287,13 @@ func (t *Terminal) drawCmd() {
 	for _, row := range t.display {
 		t.buffer = append(t.buffer, []byte(string(row))...)
 	}
+
+	currentRow := len(t.display) - 1
+	moveUp := currentRow - t.pos.row
+	if moveUp > 0 {
+		t.buffer = fmt.Appendf(t.buffer, "\x1b[%dA", moveUp)
+	}
+	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column())
 }
 
 func (t *Terminal) loadCmd(cmd string) {
@@ -469,12 +491,7 @@ func (t *Terminal) delRune() rune {
 
 		t.pos.col = len(line) - 1
 
-		moveUp := len(t.display) - 1 - t.pos.row
 		t.drawCmd()
-		if moveUp > 0 {
-			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dA", moveUp)
-		}
-		t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column()) // move up to eol
 		return '\n'
 	} else {
 		currentRow := t.display[t.pos.row]

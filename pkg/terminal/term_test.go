@@ -94,6 +94,14 @@ func TestCommandReadInput(t *testing.T) {
 			input:  "selec  bc;\x01\x1bft\r",
 			expect: "select  bc;",
 		},
+		{
+			input:  "a\x01\r\x1b[C;\r",
+			expect: "a\n;",
+		},
+		{
+			input:  "ab\x1b[D\r\x1b[C;\r",
+			expect: "a\nb;",
+		},
 	}
 
 	for _, test := range tt {
