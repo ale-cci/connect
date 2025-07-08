@@ -36,6 +36,7 @@ const (
 	CTRL_E = 'e' & 0x1f
 	CTRL_P = 'p' & 0x1f
 	CTRL_N = 'n' & 0x1f
+	CTRL_R = 'r' & 0x1f
 	CTRL_S = 's' & 0x1f
 	CTRL_Q = 'q' & 0x1f
 
@@ -91,6 +92,10 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			t.Input.ReadByte()
 			return "", io.EOF
 
+		case CTRL_R:
+			t.Input.ReadByte()
+			// t.clearCmd()
+			// t.buffer = fmt.Appendf(t.buffer, "\r\n(reverse-i-search)`': ")
 		case CTRL_L:
 			t.Input.ReadByte()
 
