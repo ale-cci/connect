@@ -96,7 +96,7 @@ func TestCommandReadInput(t *testing.T) {
 		},
 		{
 			input:  "a\x01\r\x1b[C;\r",
-			expect: "a\n;",
+			expect: "\na;",
 		},
 		{
 			input:  "ab\x1b[D\r\x1b[C;\r",

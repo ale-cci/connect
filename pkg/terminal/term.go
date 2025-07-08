@@ -11,50 +11,6 @@ import (
 	"slices"
 )
 
-type History struct {
-	Strings []string
-	idx     int
-	Size    int
-}
-
-func (h *History) Previous() (string, error) {
-	i := h.idx
-	if i < 0 || i >= len(h.Strings) {
-		return "", fmt.Errorf("no more commands")
-	}
-
-	result := h.Strings[len(h.Strings)-1-i]
-	h.idx += 1
-	return result, nil
-}
-
-func (h *History) Next() (string, error) {
-	i := h.idx - 2
-	if i == -1 {
-		h.idx -= 1
-		return "", nil
-	}
-	if i < 0 || i >= len(h.Strings) {
-		return "", fmt.Errorf("no more commands")
-	}
-	result := h.Strings[len(h.Strings)-1-i]
-	h.idx -= 1
-	return result, nil
-}
-
-func (h *History) ResetCounter() {
-	h.idx = 0
-}
-
-func (h *History) Add(s string) {
-	h.Strings = append(h.Strings, s)
-
-	// trim history
-	if h.Size > 0 {
-		h.Strings = h.Strings[len(h.Strings)-h.Size:]
-	}
-}
-
 type Terminal struct {
 	Input  bufio.Reader
 	Output io.Writer
@@ -173,7 +129,13 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 
 		case CTRL_E:
 			t.Input.ReadByte()
-			t.pos.col = len(t.display[t.pos.row])
+			row := t.display[t.pos.row]
+
+			if len(row) > 0 && row[len(row) -1] == '\n' {
+				t.pos.col = len(row) -1
+			} else {
+				t.pos.col = len(row)
+			}
 			t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", t.column())
 
 		case KEY_ESCAPE:
@@ -192,32 +154,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 				done = true
 			} else {
 				t.clearCmd()
-				t.pos.col = min(t.pos.col, len(t.display[t.pos.row]) + 1)
-
-				currentRow := t.display[t.pos.row]
-
-				var after []rune
-				var pre []rune
-
-				if t.pos.col == len(currentRow) +1 {
-					pre = append(currentRow, '\n')
-                    after = []rune{}
-				} else {
-					pre = append(currentRow[:t.pos.col], '\n')
-					after = currentRow[t.pos.col:]
-				}
-
-				t.display = append(
-					append(
-						t.display[:t.pos.row],
-						pre,
-						after,
-					),
-					t.display[t.pos.row+1:]...,
-				)
-
-				t.pos.row += 1
-				t.pos.col = 0
+				t.insertRune('\n')
 				t.drawCmd()
 			}
 
@@ -232,30 +169,9 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			}
 
 			if isPrintable(r) {
-				row := t.display[t.pos.row]
-
-				t.pos.col = min(t.pos.col, len(t.display[t.pos.row])) // move the value of col inbound
-				after := row[t.pos.col:]
-
-				t.display[t.pos.row] = []rune(strings.Join(
-					[]string{
-						string(row[:t.pos.col]),
-						string(r),
-						string(after),
-					},
-					"",
-				))
-				t.pos.col += 1
-				t.buffer = append(t.buffer, []byte(string(r))...)
-
-				if len(after) > 0 && after[len(after)-1] == '\n' {
-					after = after[:len(after)-1]
-				}
-
-				if len(after) > 0 {
-					t.buffer = fmt.Appendf(t.buffer, "%s\x1b[0K\x1b[%dG", string(after), t.column())
-				}
-
+				t.clearCmd()
+				t.insertRune(r)
+				t.drawCmd()
 			} else {
 				fmt.Printf("<%d>", r)
 			}
@@ -267,6 +183,37 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	query := t.command()
 	t.history.Add(query)
 	return query, nil
+}
+
+func (t *Terminal) insertRune(r rune) {
+	row := t.display[t.pos.row]
+	t.pos.col = min(len(row), t.pos.col)
+
+	line := append(append([]rune{}, row[:t.pos.col]...), r)
+	after := append([]rune{}, row[t.pos.col:]...)
+
+	nextRows := append([][]rune{}, t.display[t.pos.row +1:]...)
+
+	if r == '\n' {
+		t.display = append(
+			append(
+				t.display[:t.pos.row],
+				line,
+				after,
+			),
+		)
+
+		t.pos.row += 1
+		t.pos.col = 0
+	} else {
+		t.display = append(
+			t.display[:t.pos.row],
+			append(line, after...),
+		)
+		t.pos.col += 1
+	}
+
+	t.display = append(t.display, nextRows...)
 }
 
 func (t *Terminal) flush() {
@@ -370,7 +317,14 @@ func (t *Terminal) parseEscape() error {
 			}
 
 		case 'C': // right
-			maxRight := len(t.display[t.pos.row])
+			var maxRight int
+
+			row := t.display[t.pos.row]
+			if len(row) > 0 && row[len(row) -1] == '\n' {
+				maxRight = len(row) -1
+			} else {
+				maxRight = len(row)
+			}
 
 			if t.pos.col < maxRight {
 				t.pos.col = t.pos.col + 1
@@ -494,8 +448,9 @@ func (t *Terminal) delRune() rune {
 		t.drawCmd()
 		return '\n'
 	} else {
+		t.clearCmd()
 		currentRow := t.display[t.pos.row]
-		after := currentRow[t.pos.col-1:]
+		// after := currentRow[t.pos.col-1:]
 		toDel := currentRow[t.pos.col-1]
 
 		t.display[t.pos.row] = slices.Delete(
@@ -503,7 +458,8 @@ func (t *Terminal) delRune() rune {
 		)
 
 		t.pos.col -= 1
-		t.buffer = fmt.Appendf(t.buffer, "\x1b[D%s \x1b[%dD", string(after), len(after))
+		// t.buffer = fmt.Appendf(t.buffer, "\x1b[D%s \x1b[%dD", string(after), len(after))
+		t.drawCmd()
 		return toDel
 	}
 }
