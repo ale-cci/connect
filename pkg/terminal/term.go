@@ -97,11 +97,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			t.buffer = append(t.buffer, []byte("\x1b[2J")...)
 			t.buffer = append(t.buffer, []byte("\x1b[H")...)
 			t.buffer = append(t.buffer, []byte(t.Prompt)...)
-			for _, row := range t.display {
-				t.buffer = append(t.buffer, []byte(string(row))...)
-			}
-
-			t.buffer = fmt.Appendf(t.buffer, "\x1b[%d;%dH", t.pos.row+1, t.column())
+			t.drawCmd()
 
 		case CTRL_W:
 			t.Input.ReadByte()
@@ -189,7 +185,7 @@ func (t *Terminal) insertRune(r rune) {
 	row := t.display[t.pos.row]
 	t.pos.col = min(len(row), t.pos.col)
 
-	line := append(append([]rune{}, row[:t.pos.col]...), r)
+	line := append([]rune{}, row[:t.pos.col]...)
 	after := append([]rune{}, row[t.pos.col:]...)
 
 	nextRows := append([][]rune{}, t.display[t.pos.row +1:]...)
@@ -206,6 +202,7 @@ func (t *Terminal) insertRune(r rune) {
 		t.pos.row += 1
 		t.pos.col = 0
 	} else {
+		line = append(line, r)
 		t.display = append(
 			t.display[:t.pos.row],
 			append(line, after...),
@@ -231,7 +228,10 @@ func (t *Terminal) clearCmd() {
 
 // expects the prompt to be at 0:0
 func (t *Terminal) drawCmd() {
-	for _, row := range t.display {
+	for i, row := range t.display {
+		if i > 0 {
+			t.buffer = append(t.buffer, '\r', '\n')
+		}
 		t.buffer = append(t.buffer, []byte(string(row))...)
 	}
 
@@ -249,11 +249,8 @@ func (t *Terminal) loadCmd(cmd string) {
 
 	splits := strings.Split(cmd, "\n")
 
-	for idx, s := range splits {
+	for _, s := range splits {
 		row := []rune(s)
-		if idx < len(splits)-1 {
-			row = append(row, '\n')
-		}
 		t.display = append(t.display, row)
 	}
 
@@ -263,7 +260,11 @@ func (t *Terminal) loadCmd(cmd string) {
 
 func (t *Terminal) command() string {
 	var builder strings.Builder
-	for _, line := range t.display {
+	for i, line := range t.display {
+		if i > 0 {
+			builder.WriteRune('\n')
+		}
+
 		builder.WriteString(string(line))
 	}
 	return builder.String()
@@ -314,27 +315,31 @@ func (t *Terminal) parseEscape() error {
 			if t.pos.row > 0 {
 				t.pos.row -= 1
 				t.buffer = append(t.buffer, []byte("\x1b[A")...)
+			} else {
+				cmd, err := t.history.Previous()
+				if err == nil {
+					t.clearCmd()
+					t.loadCmd(cmd)
+					t.drawCmd()
+				}
 			}
 
 		case 'C': // right
-			var maxRight int
-
-			row := t.display[t.pos.row]
-			if len(row) > 0 && row[len(row) -1] == '\n' {
-				maxRight = len(row) -1
-			} else {
-				maxRight = len(row)
-			}
-
-			if t.pos.col < maxRight {
+			if t.pos.col < len(t.display[t.pos.row]) {
 				t.pos.col = t.pos.col + 1
 			}
-		case 'B': // down
-			maxDown := len(t.display) - 1
 
-			if t.pos.row < maxDown {
+		case 'B': // down
+			if t.pos.row < len(t.display) -1 {
 				t.pos.row += 1
 				t.buffer = append(t.buffer, []byte("\x1b[B")...)
+			} else {
+				cmd, err := t.history.Next()
+				if err == nil {
+					t.clearCmd()
+					t.loadCmd(cmd)
+					t.drawCmd()
+				}
 			}
 		default:
 			fmt.Printf("<%d>", b)
@@ -441,9 +446,9 @@ func (t *Terminal) delRune() rune {
 
 		t.pos.row -= 1
 		line := t.display[t.pos.row]
-		t.display[t.pos.row] = append(line[:len(line)-1], currLine...)
+		t.display[t.pos.row] = append(line, currLine...)
 
-		t.pos.col = len(line) - 1
+		t.pos.col = len(line)
 
 		t.drawCmd()
 		return '\n'
