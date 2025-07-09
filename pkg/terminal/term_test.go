@@ -153,39 +153,51 @@ func TestCursorPos(t *testing.T) {
 	}
 }
 
-func TestTermOutput(t *testing.T) {
+func TestHistoryRetrieval(t *testing.T) {
 	tt := []struct {
-		input  string
-		expect string
-	}{
+		history []string
+		input   string
+		backs   int
+		expect  string
+	} {
 		{
-			input:  "abc;\r",
-			expect: "> abc;\r\n",
+			history: []string{ "flast;", "first;" },
+			input: "f",
+			backs: 0,
+			expect: "first;",
 		},
 	}
 
 	for idx, tc := range tt {
 		t.Run(
-			fmt.Sprintf("TestTermOutput[%d]", idx),
-			func(t *testing.T) {
-				input := bytes.NewBuffer([]byte(tc.input))
+			fmt.Sprintf("TestHistoryRetrieval[%d]", idx),
+			func (t *testing.T) {
 				output := bytes.Buffer{}
+				input := append([]byte{'\x12'}, []byte(tc.input)...)
 
+				// go back n times
+				for i := 0; i < tc.backs; i += 1 {
+					input = append(input, '\x12')
+				}
+				// confirm & submit command
+				input = append(input, '\r', '\r')
+				
 				term := terminal.Terminal{
-					Input:  *bufio.NewReader(input),
+					Input: *bufio.NewReader(bytes.NewBuffer(input)),
 					Output: &output,
-					Prompt: "> ",
+				}
+				for _, h := range tc.history {
+					term.History.Add(h)
 				}
 
-				_, err := term.ReadCmd()
+				cmd, err := term.ReadCmd()
 				if err != nil {
 					t.Errorf("expected nil error, got %v", err)
 					return
 				}
 
-				got := output.String()
-				if got != tc.expect {
-					t.Errorf("expected %q, got %q", tc.expect, got)
+				if cmd != tc.expect {
+					t.Errorf("expected %v, got %v", tc.expect, cmd)
 				}
 			},
 		)
@@ -200,7 +212,6 @@ func TestPreviousWithoutValuesReturnsNothing(t *testing.T) {
 		t.Errorf("expected error, got nil")
 	}
 }
-
 
 func TestPreviousReturnsItem(t *testing.T) {
 	h := terminal.History{}

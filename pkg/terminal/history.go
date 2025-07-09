@@ -1,6 +1,9 @@
 package terminal
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type History struct {
 	Strings []string
@@ -46,3 +49,17 @@ func (h *History) Add(s string) {
 	}
 }
 
+
+func (h *History) Search(s string) (string, error) {
+	// search back
+	for {
+		cmd, err := h.Previous()
+		if err != nil {
+			return "", err
+		}
+
+		if strings.Contains(cmd, s) {
+			return cmd, nil
+		}
+	}
+}

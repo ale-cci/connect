@@ -23,7 +23,7 @@ type Terminal struct {
 	}
 	display [][]rune
 
-	history History
+	History History
 }
 
 const (
@@ -51,7 +51,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.display = [][]rune{{}}
 	t.Output.Write([]byte(t.Prompt))
 	t.buffer = []byte{}
-	t.history.ResetCounter()
+	t.History.ResetCounter()
 
 	done := false
 
@@ -71,7 +71,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		case CTRL_P:
 			t.Input.ReadByte()
 
-			cmd, err := t.history.Previous()
+			cmd, err := t.History.Previous()
 			if err == nil {
 				t.clearCmd()
 				t.loadCmd(cmd)
@@ -81,7 +81,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 		case CTRL_N:
 			t.Input.ReadByte()
 
-			cmd, err := t.history.Next()
+			cmd, err := t.History.Next()
 			if err == nil {
 				t.clearCmd()
 				t.loadCmd(cmd)
@@ -93,7 +93,35 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			return "", io.EOF
 
 		case CTRL_R:
+			// start reverse search
 			t.Input.ReadByte()
+			// start searching
+			toSearch := []rune{}
+
+			for {
+				b, err := t.Input.ReadByte()
+				if err != nil {
+					return "", err
+				}
+
+				r := rune(b)
+				if isPrintable(r) {
+					toSearch = append(toSearch, r)
+
+					t.History.ResetCounter()
+					cmd, err := t.History.Search(string(toSearch))
+					if err == nil {
+						t.loadCmd(cmd)
+					}
+				} else if b == KEY_ENTER {
+					break
+				} else if b == CTRL_R {
+					cmd, err := t.History.Search(string(toSearch))
+					if err != nil {
+						t.loadCmd(cmd)
+					}
+				}
+			}
 			// t.clearCmd()
 			// t.buffer = fmt.Appendf(t.buffer, "\r\n(reverse-i-search)`': ")
 		case CTRL_L:
@@ -182,7 +210,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 	t.flush()
 
 	query := t.command()
-	t.history.Add(query)
+	t.History.Add(query)
 	return query, nil
 }
 
@@ -321,7 +349,7 @@ func (t *Terminal) parseEscape() error {
 				t.pos.row -= 1
 				t.buffer = append(t.buffer, []byte("\x1b[A")...)
 			} else {
-				cmd, err := t.history.Previous()
+				cmd, err := t.History.Previous()
 				if err == nil {
 					t.clearCmd()
 					t.loadCmd(cmd)
@@ -339,7 +367,7 @@ func (t *Terminal) parseEscape() error {
 				t.pos.row += 1
 				t.buffer = append(t.buffer, []byte("\x1b[B")...)
 			} else {
-				cmd, err := t.history.Next()
+				cmd, err := t.History.Next()
 				if err == nil {
 					t.clearCmd()
 					t.loadCmd(cmd)
