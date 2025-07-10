@@ -18,6 +18,8 @@ $ connect database-alias
 - [x] valutare anche singoli apici come carattere di escaping
 - [ ] in caso di typo mostrare N alias più simili / help per mostrare elenco alias
 - [ ] Reverse history search
+- [ ] Build showing the current git version
+
 
 # Implementato grazie a
 
