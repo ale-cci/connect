@@ -136,7 +136,6 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			t.Input.ReadByte()
 
 			r := t.delRune()
-
 			isWord := func(r rune) bool {
 				return unicode.IsLetter(r) || r == '_' || unicode.IsDigit(r)
 			}
@@ -160,8 +159,8 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			t.Input.ReadByte()
 			row := t.display[t.pos.row]
 
-			if len(row) > 0 && row[len(row) -1] == '\n' {
-				t.pos.col = len(row) -1
+			if len(row) > 0 && row[len(row)-1] == '\n' {
+				t.pos.col = len(row) - 1
 			} else {
 				t.pos.col = len(row)
 			}
@@ -221,7 +220,7 @@ func (t *Terminal) insertRune(r rune) {
 	line := append([]rune{}, row[:t.pos.col]...)
 	after := append([]rune{}, row[t.pos.col:]...)
 
-	nextRows := append([][]rune{}, t.display[t.pos.row +1:]...)
+	nextRows := append([][]rune{}, t.display[t.pos.row+1:]...)
 
 	if r == '\n' {
 		t.display = append(
@@ -363,7 +362,7 @@ func (t *Terminal) parseEscape() error {
 			}
 
 		case 'B': // down
-			if t.pos.row < len(t.display) -1 {
+			if t.pos.row < len(t.display)-1 {
 				t.pos.row += 1
 				t.buffer = append(t.buffer, []byte("\x1b[B")...)
 			} else {
@@ -411,6 +410,30 @@ func (t *Terminal) parseEscape() error {
 					break
 				}
 			}
+		case '\x7f':
+			toDelete := 0
+            col := t.pos.col
+			for ; col > 0; col -= 1 {
+				if !unicode.IsSpace(t.display[t.pos.row][col-1]) {
+					break
+				}
+				toDelete += 1
+			}
+
+			// return back until previous character is a whitespace
+			for ; col > 0; col -= 1 {
+				c := t.display[t.pos.row][col-1]
+
+				if unicode.IsSpace(c) {
+					break
+				}
+				toDelete += 1
+			}
+
+			for i := 0; i < toDelete; i += 1 {
+				t.delRune()
+			}
+
 		default:
 			// alt - key combination
 		}
