@@ -98,34 +98,37 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			// start searching
 			toSearch := []rune{}
 
-            clearSearch := func () {
-                t.buffer = append(t.buffer, []byte("\x1b[1G\x1b[2K\x1b[A")...)
-            }
+			clearSearch := func() {
+				t.buffer = append(t.buffer, []byte("\x1b[1G\x1b[2K\x1b[A")...)
+			}
 
 			for {
-                // clearline & drawsearch
+				// clearline & drawsearch
 				t.clearCmd()
 				t.drawCmd()
 
-                // draw search
-                t.buffer = fmt.Appendf(t.buffer, "\r\nsearch: %s_", string(toSearch))
-                // draw search after
-                t.Output.Write(t.buffer)
-                t.buffer = []byte{}
+				// draw search
+				t.buffer = fmt.Appendf(t.buffer, "\r\n\x1b[2Ksearch: %s", string(toSearch))
+				// draw search after
+				t.Output.Write(t.buffer)
+				t.buffer = []byte{}
 				b, err := t.Input.ReadByte()
 				if err != nil {
 					return "", err
 				}
 
 				r := rune(b)
-				if isPrintable(r) {
-					toSearch = append(toSearch, r)
+				if b == KEY_BACKSPACE {
+					if len(toSearch) > 0 {
+						toSearch = toSearch[:len(toSearch)-1]
 
-					t.History.ResetCounter()
-					cmd, err := t.History.Search(string(toSearch))
-					if err == nil {
-						t.loadCmd(cmd)
+						t.History.ResetCounter()
+						cmd, err := t.History.Search(string(toSearch))
+						if err == nil {
+							t.loadCmd(cmd)
+						}
 					}
+
 				} else if b == KEY_ENTER {
 					break
 				} else if b == CTRL_C {
@@ -137,14 +140,23 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 					if err != nil {
 						t.loadCmd(cmd)
 					}
+				} else if isPrintable(r) {
+					toSearch = append(toSearch, r)
+
+					t.History.ResetCounter()
+					cmd, err := t.History.Search(string(toSearch))
+					if err == nil {
+						t.loadCmd(cmd)
+					}
+
 				}
-                clearSearch()
+				clearSearch()
 			}
-            clearSearch()
-            t.clearCmd()
-            t.drawCmd()
-            t.Output.Write(t.buffer)
-            t.buffer = []byte{}
+			clearSearch()
+			t.clearCmd()
+			t.drawCmd()
+			t.Output.Write(t.buffer)
+			t.buffer = []byte{}
 		case CTRL_L:
 			t.Input.ReadByte()
 
