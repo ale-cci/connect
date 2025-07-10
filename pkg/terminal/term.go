@@ -98,7 +98,20 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			// start searching
 			toSearch := []rune{}
 
+            clearSearch := func () {
+                t.buffer = append(t.buffer, []byte("\x1b[1G\x1b[2K\x1b[A")...)
+            }
+
 			for {
+                // clearline & drawsearch
+				t.clearCmd()
+				t.drawCmd()
+
+                // draw search
+                t.buffer = fmt.Appendf(t.buffer, "\r\nsearch: %s_", string(toSearch))
+                // draw search after
+                t.Output.Write(t.buffer)
+                t.buffer = []byte{}
 				b, err := t.Input.ReadByte()
 				if err != nil {
 					return "", err
@@ -115,15 +128,23 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 					}
 				} else if b == KEY_ENTER {
 					break
+				} else if b == CTRL_C {
+					break
+				} else if b == CTRL_D {
+					return "", io.EOF
 				} else if b == CTRL_R {
 					cmd, err := t.History.Search(string(toSearch))
 					if err != nil {
 						t.loadCmd(cmd)
 					}
 				}
+                clearSearch()
 			}
-			// t.clearCmd()
-			// t.buffer = fmt.Appendf(t.buffer, "\r\n(reverse-i-search)`': ")
+            clearSearch()
+            t.clearCmd()
+            t.drawCmd()
+            t.Output.Write(t.buffer)
+            t.buffer = []byte{}
 		case CTRL_L:
 			t.Input.ReadByte()
 
@@ -412,7 +433,7 @@ func (t *Terminal) parseEscape() error {
 			}
 		case '\x7f':
 			toDelete := 0
-            col := t.pos.col
+			col := t.pos.col
 			for ; col > 0; col -= 1 {
 				if !unicode.IsSpace(t.display[t.pos.row][col-1]) {
 					break
