@@ -31,6 +31,7 @@ $ connect database-alias
 
 - [ ] syntax highlight
 - [ ] docs
+- [ ] Release history
 
 #### useful links
 - https://elliotchance.medium.com/how-to-create-an-ssh-tunnel-in-go-b63722d682aa
