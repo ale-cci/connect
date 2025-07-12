@@ -38,14 +38,18 @@ jobs:
     - name: Build for Linux (amd64)
       run: GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-linux-amd64 cmd/connect/main.go
 
-    - name: Build for Windows (amd64)
-      run: GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-windows-amd64.exe cmd/connect/main.go
+    # no windows support (termios)
+    # - name: Build for Windows (amd64)
+    #   run: GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-windows-amd64.exe cmd/connect/main.go
+
+    - name: Build for Linux (arm64)
+      run: GOOS=linux GOARCH=arm64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-linux-arm64 cmd/connect/main.go
 
     - name: Build for macOS (amd64)
       run: GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-darwin-amd64 cmd/connect/main.go
 
-    - name: Build for Linux (arm64)
-      run: GOOS=linux GOARCH=arm64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-linux-arm64 cmd/connect/main.go
+    - name: Build for macOS (arm64)
+      run: GOOS=darwin GOARCH=arm64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-darwin-arm64 cmd/connect/main.go
 
     - name: Create Release
       id: create_release
@@ -60,9 +64,9 @@ jobs:
         prerelease: false
         files: |
           connect-linux-amd64
-          connect-windows-amd64.exe
-          connect-darwin-amd64
           connect-linux-arm64
+          connect-darwin-amd64
+          connect-darwin-arm64
 
     - name: Upload artifacts (for non-tag pushes)
       uses: actions/upload-artifact@v4
@@ -71,6 +75,6 @@ jobs:
         name: connect-builds-${{ github.sha }}
         path: |
           connect-linux-amd64
-          connect-windows-amd64.exe
-          connect-darwin-amd64
           connect-linux-arm64
+          connect-darwin-amd64
+          connect-darwin-arm64
