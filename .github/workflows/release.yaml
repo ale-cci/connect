@@ -3,9 +3,9 @@ name: Go Release
 on:
   push:
     branches:
-      - main # O 'master' se il tuo branch principale si chiama così
+    - master
     tags:
-      - 'v*.*.*' # Trigger anche sui tag per le release manuali/specifiche
+    - 'v*.*.*'
 
 jobs:
   build-and-release:
