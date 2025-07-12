@@ -69,9 +69,8 @@ jobs:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       run:
         |
-          gh release create "${env.CURRENT_VERSION}" \
-            --repo="${GITHUB_REPOSITORY}" \
-            --title="${env.CURRENT_VERSION}" \
+          gh release create "${{env.CURRENT_VERSION}}" \
+            --title="${{env.CURRENT_VERSION}}" \
             --generate-notes \
             connect-linux-* \
             connect-darwin-*
