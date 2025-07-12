@@ -21,6 +21,8 @@ import (
 	"codeberg.org/ale-cci/connect/pkg/terminal"
 )
 
+var version string = "?"
+
 func main() {
 	config, err := pkg.LoadConfig(pkg.ConfigPath("config.yaml"))
 	if err != nil {
@@ -40,6 +42,14 @@ func main() {
 			aliases = append(aliases, name)
 		}
 		fmt.Printf("%s", strings.Join(aliases, " "))
+		os.Exit(0)
+	}
+
+	if alias == "-v" || alias == "--version" {
+		fmt.Printf(
+			"connect version %s\n",
+			version,
+		)
 		os.Exit(0)
 	}
 
