@@ -34,7 +34,9 @@ jobs:
           # Fallback if no tags are found, use commit hash
           VERSION=$(git rev-parse --short HEAD)
         fi
+        CURRENT_TAG=$(git describe --tags --always --abbrev=0)
         echo "CURRENT_VERSION=$VERSION" >> $GITHUB_ENV
+        echo "CURRENT_TAG=$CURRENT_TAG" >> $GITHUB_ENV
 
     - name: Build for Linux (amd64)
       run: GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-linux-amd64 cmd/connect/main.go
@@ -69,9 +71,10 @@ jobs:
         GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
       run:
         |
-          gh release create "${{env.CURRENT_VERSION}}" \
+          gh release create "${{env.CURRENT_TAG}}" \
             --title="${{env.CURRENT_VERSION}}" \
             --generate-notes \
+            --verify-tag \
             connect-linux-* \
             connect-darwin-*
 
