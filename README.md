@@ -9,20 +9,30 @@ go install codeberg.org/ale-cci/connect/cmd/connect-manager@latest
 $ connect-manager import connection-file.csv
 $ connect database-alias
 ```
-# TODO
 
-- [ ] funzione per effettuare dump
-- [x] importazione di file csv
-- [ ] display di stringhe multiriga
-- [x] gestione di tunnel
-- [x] valutare anche singoli apici come carattere di escaping
-- [ ] in caso di typo mostrare N alias più simili / help per mostrare elenco alias
+# Possible next features
+- [x] load configurations from csv file
+- [x] ssh tunnel management
+
 - [ ] Reverse history search
+- [ ] correctly display tables with multiline strings
 - [ ] Build showing the current git version
+- [ ] save history to file
+- [ ] query autocompletion
 
+- [ ] custom commands
+    - /set rowlimit 100
+    - /set tabsize 4
+    - /save tabsize
+    - /save all
+    - /show tabsize
+    - /dump filename.xyz select xyz from tablename
+    - !! expands to previous query
 
-# Implementato grazie a
+- [ ] syntax highlight
+- [ ] docs
 
+#### useful links
 - https://elliotchance.medium.com/how-to-create-an-ssh-tunnel-in-go-b63722d682aa
 - https://ixday.github.io/post/golang_ssh_tunneling/
 - https://cs.opensource.google/go/x/term/+/refs/tags/v0.32.0:term_unix_bsd.go
