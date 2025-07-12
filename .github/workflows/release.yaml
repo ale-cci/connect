@@ -1,0 +1,76 @@
+name: Go Release
+
+on:
+  push:
+    branches:
+      - main # O 'master' se il tuo branch principale si chiama così
+    tags:
+      - 'v*.*.*' # Trigger anche sui tag per le release manuali/specifiche
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+
+    - name: Run tests
+      run: go test ./...
+
+    - name: Get current version
+      id: get_version
+      run: |
+        VERSION=$(git describe --tags --always)
+        if [[ $VERSION == "" ]]; then
+          # Fallback if no tags are found, use commit hash
+          VERSION=$(git rev-parse --short HEAD)
+        fi
+        echo "CURRENT_VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Build for Linux (amd64)
+      run: GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-linux-amd64 cmd/connect/main.go
+
+    - name: Build for Windows (amd64)
+      run: GOOS=windows GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-windows-amd64.exe cmd/connect/main.go
+
+    - name: Build for macOS (amd64)
+      run: GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-darwin-amd64 cmd/connect/main.go
+
+    - name: Build for Linux (arm64)
+      run: GOOS=linux GOARCH=arm64 go build -ldflags="-X main.version=${{ env.CURRENT_VERSION }}" -o connect-linux-arm64 cmd/connect/main.go
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/') # Crea la release solo se il push è un tag
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        files: |
+          connect-linux-amd64
+          connect-windows-amd64.exe
+          connect-darwin-amd64
+          connect-linux-arm64
+
+    - name: Upload artifacts (for non-tag pushes)
+      uses: actions/upload-artifact@v4
+      if: ${{ !startsWith(github.ref, 'refs/tags/') }} # Carica gli artefatti solo se NON è un tag
+      with:
+        name: connect-builds-${{ github.sha }}
+        path: |
+          connect-linux-amd64
+          connect-windows-amd64.exe
+          connect-darwin-amd64
+          connect-linux-arm64
