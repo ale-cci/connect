@@ -138,19 +138,93 @@ func main() {
 		slog.Debug("executing command", "cmd", cmd)
 
 		start := time.Now()
-		result, err := runQuery(db, cmd)
+
+		var result *ResultSet
+
+		if runCmd(cmd, &t) {
+			result = nil
+		} else {
+			result, err = runQuery(db, cmd)
+		}
+
 		elapsed := time.Since(start)
 
 		if err != nil {
 			slog.Error("Error while running query:", "err", err)
-		} else if result != nil {
-			if len(result.Headers) > 0 {
-				display(result)
+		} else {
+			if result != nil {
+				if len(result.Headers) > 0 {
+					display(result)
+				}
+				slog.Info("Execution completed", "elapsed", elapsed, "rows", len(result.Rows))
+			} else {
+				slog.Info("Execution completed", "elapsed", elapsed)
 			}
-			slog.Info("Execution completed", "elapsed", elapsed, "rows", len(result.Rows))
 		}
 	}
 }
+
+func runCmd(cmd string, t *terminal.Terminal) bool {
+	tokens := tokenize(strings.TrimSpace(cmd))
+
+	// commands := [][]string{
+	// 	{"\\show", {"config", "rowlimit", "tabsize", "histlen"}},
+	// 	{"\\set", {"rowlimit", "tabsize", "histlen"}, int},
+	// 	{"\\save", {"rowlimit", "tabsize", "histlen", "all"}},
+	// 	{"\\export", string, string},
+	// }
+
+	var err error
+	if tokens[0][0] == '\\' {
+		switch tokens[0] {
+		case "\\set":
+			err = execSet(tokens[1:], t)
+		case "\\show":
+			err = execShow(tokens[1:], t)
+		case "\\save":
+			err = execShow(tokens[1:], t)
+		case "\\export":
+			err = execShow(tokens[1:], t)
+		default:
+			err = fmt.Errorf("command not found")
+		}
+
+		if err != nil {
+			slog.Error("Command execution failed", "err", err)
+		}
+		return true
+	}
+	return false
+}
+
+func tokenize(cmd string) []string {
+	tokens := []string{}
+
+	var token []rune
+	for _, chr := range cmd {
+		if unicode.IsSpace(chr) {
+			if len(token) > 0 {
+				tokens = append(tokens, string(token))
+				token = []rune{}
+			}
+		} else {
+			token = append(token, chr)
+		}
+	}
+
+	if len(token) > 0 {
+		tokens = append(tokens, string(token))
+	}
+	return tokens
+}
+
+func execShow(tokens []string, t *terminal.Terminal) error {
+	return nil
+}
+func execSet(tokens []string, t *terminal.Terminal) error {
+	return nil
+}
+
 
 func display(result *ResultSet) {
 	colSize := []int{}
@@ -196,36 +270,6 @@ func display(result *ResultSet) {
 		fmt.Print(" |\n")
 	}
 	printSep()
-}
-
-func parseCmd(r *bufio.Reader) (string, error) {
-	cmd := []rune{}
-
-	var escapeChr rune = '\x00'
-
-	for {
-		chr, _, err := r.ReadRune()
-		if err != nil {
-			return "", err
-		}
-
-		if chr == '"' || chr == '\'' {
-			if escapeChr == chr {
-				escapeChr = '\x00'
-			} else if escapeChr == '\x00' {
-				escapeChr = chr
-			}
-		} else if chr == '\x1b' {
-			v, _, _ := r.ReadRune()
-			fmt.Printf("escape seq: %v", v)
-		} else if chr == ';' && escapeChr == '\x00' {
-			break
-		}
-
-		cmd = append(cmd, chr)
-	}
-
-	return strings.TrimSpace(string(cmd)), nil
 }
 
 func runQuery(db *sql.DB, cmd string) (results *ResultSet, err error) {
