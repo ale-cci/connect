@@ -3,6 +3,9 @@ package terminal
 import (
 	"fmt"
 	"strings"
+	"io"
+	"bufio"
+	"encoding/base64"
 )
 
 type History struct {
@@ -62,4 +65,23 @@ func (h *History) Search(s string) (string, error) {
 			return cmd, nil
 		}
 	}
+}
+
+func (h *History) Save(fd io.Writer) {
+	for _, cmd := range h.Strings {
+		toWrite := base64.StdEncoding.EncodeToString([]byte(cmd))
+		fd.Write([]byte(toWrite))
+		fd.Write([]byte("\n"))
+	}
+}
+
+func (h *History) Load(fd io.Reader) {
+	reader := bufio.NewScanner(fd)
+	for reader.Scan() {
+		cmd, err := base64.StdEncoding.DecodeString(reader.Text())
+		if err == nil {
+			h.Add(string(cmd))
+		}
+	}
+	
 }

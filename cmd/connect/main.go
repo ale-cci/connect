@@ -127,6 +127,20 @@ func main() {
 		Output: os.Stdout,
 		Prompt: "> ",
 	}
+
+	fd, err := os.Open(pkg.ConfigPath("history.txt"))
+	if err == nil {
+		t.History.Load(fd)
+		fd.Close()
+	}
+	defer func() {
+		fd, err := os.Create(pkg.ConfigPath("history.txt"))
+		if err == nil {
+			t.History.Save(fd)
+			fd.Close()
+		}
+	}()
+
 	for {
 		cmd, err := t.ReadCmd()
 		if err != nil {
@@ -177,14 +191,8 @@ func runCmd(cmd string, t *terminal.Terminal) bool {
 	var err error
 	if tokens[0][0] == '\\' {
 		switch tokens[0] {
-		case "\\set":
-			err = execSet(tokens[1:], t)
-		case "\\show":
-			err = execShow(tokens[1:], t)
-		case "\\save":
-			err = execShow(tokens[1:], t)
-		case "\\export":
-			err = execShow(tokens[1:], t)
+		case "\\config":
+			err = execConfig(tokens[1:], t)
 		default:
 			err = fmt.Errorf("command not found")
 		}
@@ -218,13 +226,19 @@ func tokenize(cmd string) []string {
 	return tokens
 }
 
-func execShow(tokens []string, t *terminal.Terminal) error {
+func execConfig(tokens []string, t *terminal.Terminal) error {
+	if len(tokens) == 0 {
+		return fmt.Errorf("\\config {show,set,save}")
+	}
+	switch tokens[0] {
+	case "show":
+	case "set":
+	case "save":
+	default:
+		return fmt.Errorf("\\config {show,set,save}")
+	}
 	return nil
 }
-func execSet(tokens []string, t *terminal.Terminal) error {
-	return nil
-}
-
 
 func display(result *ResultSet) {
 	colSize := []int{}
