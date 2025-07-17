@@ -49,7 +49,6 @@ func (c Connection) Connstring() string {
 	return buf.String()
 }
 
-
 type User struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
@@ -64,9 +63,16 @@ type ConnectionInfo struct {
 	Driver    string `yaml:"driver"`
 }
 
+type ConfigOptions struct {
+	AutoLimit int `yaml:"autolimit"`
+	HistSize  int `yaml:"histsize"`
+	TabSize   int `yaml:"tabsize"`
+}
+
 type Config struct {
 	Credentials map[string]User           `yaml:"credentials"`
 	Databases   map[string]ConnectionInfo `yaml:"databases"`
+	Options     ConfigOptions             `yaml:"options"`
 }
 
 func LoadConfig(filepath string) (cnf Config, err error) {
@@ -84,4 +90,3 @@ func ConfigPath(filename string) string {
 	dir := usr.HomeDir
 	return path.Join(dir, ".config/connect", filename)
 }
-

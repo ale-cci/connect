@@ -128,13 +128,17 @@ func main() {
 		Prompt: "> ",
 	}
 
-	fd, err := os.Open(pkg.ConfigPath("history.txt"))
+	histfilePath := pkg.ConfigPath("history.txt")
+	fd, err := os.Open(histfilePath)
 	if err == nil {
 		t.History.Load(fd)
 		fd.Close()
+	} else {
+		slog.Debug("Failed to read history", "err", err)
 	}
+
 	defer func() {
-		fd, err := os.Create(pkg.ConfigPath("history.txt"))
+		fd, err := os.Create(histfilePath)
 		if err == nil {
 			t.History.Save(fd)
 			fd.Close()
@@ -155,6 +159,10 @@ func main() {
 
 		var result *ResultSet
 
+		if cmd == "" {
+			fmt.Println("^C")
+			continue
+		}
 		if runCmd(cmd, &t) {
 			result = nil
 		} else {
