@@ -12,7 +12,6 @@ type History struct {
 	Strings []string
 	idx     int
 	Size    int
-	Limit int
 }
 
 func (h *History) Previous() (string, error) {
@@ -49,7 +48,8 @@ func (h *History) Add(s string) {
 
 	// trim history
 	if h.Size > 0 {
-		h.Strings = h.Strings[len(h.Strings)-h.Size:]
+		start := max(len(h.Strings) - h.Size, 0)
+		h.Strings = h.Strings[start:]
 	}
 }
 

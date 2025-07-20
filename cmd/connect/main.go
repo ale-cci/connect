@@ -259,46 +259,58 @@ func IntValueAccessor(addr *int) Accessor {
 
 func execConfig(tokens []string, t *terminal.Terminal) error {
 	if len(tokens) == 0 {
-		return fmt.Errorf("\\config {show,set,save,reset}")
+		return fmt.Errorf("\\config {show,set}")
 	}
 
 	configs := map[string]struct {
 		get func() string
 		set func(string) error
 	}{
-		"histsize": IntValueAccessor(&t.History.Limit),
+		"histsize":  IntValueAccessor(&t.History.Size),
 		"autolimit": IntValueAccessor(&t.RowLimit),
-		"tabsize": IntValueAccessor(&t.TabSize),
+		"tabsize":   IntValueAccessor(&t.TabSize),
 	}
 
-
 	switch tokens[0] {
-	case "show":
-		name := tokens[1]
-		c, ok := configs[name]
-		if !ok {
-			return fmt.Errorf("config %s does not exist")
+	case "get":
+		result := ResultSet{
+			Headers: []string{"Name", "Value"},
 		}
 
-		slog.Info("show", name, c.get())
+		if len(tokens) > 1 {
+			name := tokens[1]
+			c, ok := configs[name]
+			if !ok {
+				return fmt.Errorf("config %s does not exist")
+			}
+
+			result.Rows = [][]string{
+				{name, c.get()},
+			}
+		} else {
+			for name, attr := range configs {
+				result.Rows = append(result.Rows, []string{
+					name, attr.get(),
+				})
+			}
+		}
+
+		display(&result)
 
 	case "set":
-		name := tokens[1]
-		c, ok := configs[name]
-		if !ok {
-			return fmt.Errorf("config %s does not exist")
+		if len(tokens) > 1 {
+			name := tokens[1]
+			c, ok := configs[name]
+			if !ok {
+				return fmt.Errorf("config %s does not exist")
+			}
+
+			return c.set(tokens[2])
 		}
-
-		return c.set(tokens[2])
-
-	case "reset":
-		slog.Info("configuration loaded from file")
-
-	case "save":
-		slog.Info("configuration saved")
+		return fmt.Errorf("config set <name> <value>")
 
 	default:
-		return fmt.Errorf("\\config {show,set,save}")
+		return fmt.Errorf("\\config {get,set}")
 	}
 	return nil
 }
