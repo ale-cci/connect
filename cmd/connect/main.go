@@ -177,14 +177,10 @@ func main() {
 			result = nil
 		} else {
 			if t.RowLimit > 0 {
-				isSelect := strings.HasPrefix(
-					strings.ToLower(strings.TrimSpace(cmd)),
-					"select",
-				)
-				if isSelect {
-					cmd = strings.TrimSuffix(strings.TrimSpace(cmd), ";")
-					cmd = fmt.Sprintf("%s limit %d;", cmd, t.RowLimit)
-					slog.Info("Autolimit has modified the query", "limit", t.RowLimit)
+				newcmd, replaced := AddLimit(cmd, t.RowLimit)
+				cmd = newcmd
+				if replaced {
+					slog.Info("Autolimit added", "limit", t.RowLimit)
 				}
 			}
 
@@ -206,6 +202,19 @@ func main() {
 			}
 		}
 	}
+}
+
+func AddLimit(cmd string, limit int) (string, bool) {
+	cleanedCmd := strings.TrimRightFunc(strings.ToLower(strings.TrimSpace(cmd)), func(r rune) bool {
+        return unicode.IsDigit(r) || unicode.IsSpace(r) || r == ';'
+    })
+
+	isSelect := strings.HasPrefix(cleanedCmd, "select")
+	if isSelect && !strings.HasSuffix(cleanedCmd, "limit") {
+		cmd = fmt.Sprintf("%s limit %d;", strings.TrimSuffix(strings.TrimSpace(cmd), ";"), limit)
+		return cmd, true
+	}
+	return cmd, false
 }
 
 func runCmd(cmd string, t *terminal.Terminal, config *pkg.Config) bool {
