@@ -24,6 +24,12 @@ import (
 
 var version string = "?"
 
+func loadconfig(t *terminal.Terminal, c *pkg.Config) {
+	t.History.Size = c.Options.HistSize
+	t.TabSize = c.Options.TabSize
+	t.RowLimit = c.Options.AutoLimit
+}
+
 func main() {
 	config, err := pkg.LoadConfig(pkg.ConfigPath("config.yaml"))
 
@@ -129,9 +135,7 @@ func main() {
 		Output: os.Stdout,
 		Prompt: "> ",
 	}
-	t.History.Size = config.Options.HistSize
-	t.TabSize = config.Options.TabSize
-	t.RowLimit = config.Options.AutoLimit
+	loadconfig(&t, &config)
 
 	histfilePath := pkg.ConfigPath("history.txt")
 	fd, err := os.Open(histfilePath)
@@ -157,6 +161,7 @@ func main() {
 				break
 			}
 			slog.Error("An error has occurred:", "err", err)
+			continue
 		}
 		slog.Debug("executing command", "cmd", cmd)
 
@@ -168,9 +173,21 @@ func main() {
 			fmt.Println("^C")
 			continue
 		}
-		if runCmd(cmd, &t) {
+		if runCmd(cmd, &t, &config) {
 			result = nil
 		} else {
+			if t.RowLimit > 0 {
+				isSelect := strings.HasPrefix(
+					strings.ToLower(strings.TrimSpace(cmd)),
+					"select",
+				)
+				if isSelect {
+					cmd = strings.TrimSuffix(strings.TrimSpace(cmd), ";")
+					cmd = fmt.Sprintf("%s limit %d;", cmd, t.RowLimit)
+					slog.Info("Autolimit has modified the query", "limit", t.RowLimit)
+				}
+			}
+
 			result, err = runQuery(db, cmd)
 		}
 
@@ -191,7 +208,7 @@ func main() {
 	}
 }
 
-func runCmd(cmd string, t *terminal.Terminal) bool {
+func runCmd(cmd string, t *terminal.Terminal, config *pkg.Config) bool {
 	tokens := tokenize(strings.TrimSpace(strings.TrimSuffix(cmd, ";")))
 
 	// commands := [][]string{
@@ -205,7 +222,7 @@ func runCmd(cmd string, t *terminal.Terminal) bool {
 	if tokens[0][0] == '\\' {
 		switch tokens[0] {
 		case "\\config":
-			err = execConfig(tokens[1:], t)
+			err = execConfig(tokens[1:], t, config)
 		default:
 			err = fmt.Errorf("command not found")
 		}
@@ -260,7 +277,7 @@ func IntValueAccessor(addr *int) Accessor {
 	}
 }
 
-func execConfig(tokens []string, t *terminal.Terminal) error {
+func execConfig(tokens []string, t *terminal.Terminal, config *pkg.Config) error {
 	if len(tokens) == 0 {
 		return fmt.Errorf("\\config {show,set}")
 	}
@@ -311,6 +328,9 @@ func execConfig(tokens []string, t *terminal.Terminal) error {
 			return c.set(tokens[2])
 		}
 		return fmt.Errorf("config set <name> <value>")
+
+	case "reset":
+		loadconfig(t, config)
 
 	default:
 		return fmt.Errorf("\\config {get,set}")
