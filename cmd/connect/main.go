@@ -129,6 +129,9 @@ func main() {
 		Output: os.Stdout,
 		Prompt: "> ",
 	}
+	t.History.Size = config.Options.HistSize
+	t.TabSize = config.Options.TabSize
+	t.RowLimit = config.Options.AutoLimit
 
 	histfilePath := pkg.ConfigPath("history.txt")
 	fd, err := os.Open(histfilePath)
