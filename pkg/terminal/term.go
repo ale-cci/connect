@@ -232,7 +232,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 				return "", err
 			}
 
-			if isPrintable(r) {
+			if isPrintable(r) || r == '\t'{
 				t.clearCmd()
 				t.insertRune(r)
 				t.drawCmd()
@@ -300,7 +300,8 @@ func (t *Terminal) drawCmd() {
 		if i > 0 {
 			t.buffer = append(t.buffer, '\r', '\n')
 		}
-		t.buffer = append(t.buffer, []byte(string(row))...)
+		output := DisplayString(row, t.TabSize)
+		t.buffer = append(t.buffer, []byte(string(output))...)
 	}
 
 	currentRow := len(t.display) - 1
@@ -475,16 +476,32 @@ func (t *Terminal) parseEscape() error {
 		}
 	}
 
-	cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
-	if t.pos.row == 0 {
-		cursorX += len(t.Prompt)
-	}
+	cursorX := t.column()
 	t.buffer = fmt.Appendf(t.buffer, "\x1b[%dG", cursorX)
 	return nil
 }
 
+func DisplayString(str []rune, tabsize int) (output []rune){
+	if tabsize == 0 {
+		tabsize = 8
+	}
+	for _, s := range str {
+		if s == '\t' {
+			nextSpace := tabsize - (len(output) % tabsize)
+
+			for pos := 0; pos < nextSpace; pos += 1 {
+				output = append(output, ' ')
+			}
+		} else {
+			output = append(output, s)
+		}
+	}
+	return
+}
+
 func (t *Terminal) column() int {
-	cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
+	cursorX := len(DisplayString(t.display[t.pos.row][:t.pos.col], t.TabSize)) +1
+	// cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
 	if t.pos.row == 0 {
 		cursorX += len(t.Prompt) // 2 "> "
 	}
