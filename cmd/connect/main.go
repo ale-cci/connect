@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -25,6 +26,7 @@ var version string = "?"
 
 func main() {
 	config, err := pkg.LoadConfig(pkg.ConfigPath("config.yaml"))
+
 	if err != nil {
 		slog.Error("Failed to read config file", "err", err)
 		return
@@ -187,7 +189,7 @@ func main() {
 }
 
 func runCmd(cmd string, t *terminal.Terminal) bool {
-	tokens := tokenize(strings.TrimSpace(cmd))
+	tokens := tokenize(strings.TrimSpace(strings.TrimSuffix(cmd, ";")))
 
 	// commands := [][]string{
 	// 	{"\\show", {"config", "rowlimit", "tabsize", "histlen"}},
@@ -234,14 +236,67 @@ func tokenize(cmd string) []string {
 	return tokens
 }
 
+type Accessor struct {
+	get func() string
+	set func(value string) error
+}
+
+func IntValueAccessor(addr *int) Accessor {
+	return Accessor{
+		get: func() string {
+			return fmt.Sprintf("%d", *addr)
+		},
+		set: func(value string) error {
+			parsed, err := strconv.Atoi(value)
+			if err != nil {
+				return err
+			}
+			*addr = parsed
+			return nil
+		},
+	}
+}
+
 func execConfig(tokens []string, t *terminal.Terminal) error {
 	if len(tokens) == 0 {
-		return fmt.Errorf("\\config {show,set,save}")
+		return fmt.Errorf("\\config {show,set,save,reset}")
 	}
+
+	configs := map[string]struct {
+		get func() string
+		set func(string) error
+	}{
+		"histsize": IntValueAccessor(&t.History.Limit),
+		"autolimit": IntValueAccessor(&t.RowLimit),
+		"tabsize": IntValueAccessor(&t.TabSize),
+	}
+
+
 	switch tokens[0] {
 	case "show":
+		name := tokens[1]
+		c, ok := configs[name]
+		if !ok {
+			return fmt.Errorf("config %s does not exist")
+		}
+
+		slog.Info("show", name, c.get())
+
 	case "set":
+		name := tokens[1]
+		c, ok := configs[name]
+		if !ok {
+			return fmt.Errorf("config %s does not exist")
+		}
+
+		return c.set(tokens[2])
+
+	case "reset":
+		slog.Info("configuration loaded from file")
+
 	case "save":
+		slog.Info("configuration saved")
+
 	default:
 		return fmt.Errorf("\\config {show,set,save}")
 	}

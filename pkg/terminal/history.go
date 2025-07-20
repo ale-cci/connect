@@ -12,6 +12,7 @@ type History struct {
 	Strings []string
 	idx     int
 	Size    int
+	Limit int
 }
 
 func (h *History) Previous() (string, error) {

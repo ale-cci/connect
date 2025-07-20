@@ -17,6 +17,9 @@ type Terminal struct {
 	Prompt string
 	buffer []byte
 
+	TabSize int
+	RowLimit int
+
 	pos struct {
 		row int
 		col int
