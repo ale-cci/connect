@@ -206,8 +206,8 @@ func main() {
 
 func AddLimit(cmd string, limit int) (string, bool) {
 	cleanedCmd := strings.TrimRightFunc(strings.ToLower(strings.TrimSpace(cmd)), func(r rune) bool {
-        return unicode.IsDigit(r) || unicode.IsSpace(r) || r == ';'
-    })
+		return unicode.IsDigit(r) || unicode.IsSpace(r) || r == ';'
+	})
 
 	isSelect := strings.HasPrefix(cleanedCmd, "select")
 	if isSelect && !strings.HasSuffix(cleanedCmd, "limit") {
@@ -220,24 +220,26 @@ func AddLimit(cmd string, limit int) (string, bool) {
 func runCmd(cmd string, t *terminal.Terminal, config *pkg.Config) bool {
 	tokens := tokenize(strings.TrimSpace(strings.TrimSuffix(cmd, ";")))
 
-	// commands := [][]string{
-	// 	{"\\show", {"config", "rowlimit", "tabsize", "histlen"}},
-	// 	{"\\set", {"rowlimit", "tabsize", "histlen"}, int},
-	// 	{"\\save", {"rowlimit", "tabsize", "histlen", "all"}},
-	// 	{"\\export", string, string},
-	// }
+	commands := map[string]struct {
+		Help string
+		Run  func(args []string, t *terminal.Terminal, config *pkg.Config) error
+	}{
+		"\\config": {
+			Run:  execConfig,
+			Help: "Edit runtime configuration",
+		},
+	}
 
-	var err error
-	if tokens[0][0] == '\\' {
-		switch tokens[0] {
-		case "\\config":
-			err = execConfig(tokens[1:], t, config)
-		default:
-			err = fmt.Errorf("command not found")
-		}
-
-		if err != nil {
-			slog.Error("Command execution failed", "err", err)
+	commandName := tokens[0]
+	if commandName[0] == '\\' {
+		cmd, ok := commands[commandName]
+		if !ok {
+			slog.Error("Command not found", "value", commandName)
+		} else {
+			err := cmd.Run(tokens[1:], t, config)
+			if err != nil {
+				slog.Error("Command execution failed", "err", err)
+			}
 		}
 		return true
 	}

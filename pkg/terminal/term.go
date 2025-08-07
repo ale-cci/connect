@@ -17,7 +17,7 @@ type Terminal struct {
 	Prompt string
 	buffer []byte
 
-	TabSize int
+	TabSize  int
 	RowLimit int
 
 	pos struct {
@@ -43,6 +43,7 @@ const (
 	CTRL_S = 's' & 0x1f
 	CTRL_Q = 'q' & 0x1f
 
+	KEY_NL        = 10
 	KEY_ENTER     = 13
 	KEY_ESCAPE    = 27
 	KEY_BACKSPACE = 127
@@ -211,7 +212,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			}
 			t.parseEscape()
 
-		case KEY_ENTER:
+		case KEY_ENTER, KEY_NL:
 			_, err = t.Input.ReadByte()
 			if t.isCommandComplete() {
 				t.buffer = append(t.buffer, '\r', '\n')
@@ -232,7 +233,7 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 				return "", err
 			}
 
-			if isPrintable(r) || r == '\t'{
+			if isPrintable(r) || r == '\t' {
 				t.clearCmd()
 				t.insertRune(r)
 				t.drawCmd()
@@ -481,7 +482,7 @@ func (t *Terminal) parseEscape() error {
 	return nil
 }
 
-func DisplayString(str []rune, tabsize int) (output []rune){
+func DisplayString(str []rune, tabsize int) (output []rune) {
 	if tabsize == 0 {
 		tabsize = 8
 	}
@@ -500,7 +501,7 @@ func DisplayString(str []rune, tabsize int) (output []rune){
 }
 
 func (t *Terminal) column() int {
-	cursorX := len(DisplayString(t.display[t.pos.row][:t.pos.col], t.TabSize)) +1
+	cursorX := len(DisplayString(t.display[t.pos.row][:t.pos.col], t.TabSize)) + 1
 	// cursorX := CursorPos(t.display[t.pos.row], t.pos.col)
 	if t.pos.row == 0 {
 		cursorX += len(t.Prompt) // 2 "> "
