@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -173,8 +172,9 @@ func main() {
 			fmt.Println("^C")
 			continue
 		}
-		if runCmd(cmd, &t, &config) {
+		if IsCommand(cmd) {
 			result = nil
+			err = RunCommand(cmd, db, &t, &config)
 		} else {
 			if t.RowLimit > 0 {
 				newcmd, replaced := AddLimit(cmd, t.RowLimit)
@@ -215,138 +215,6 @@ func AddLimit(cmd string, limit int) (string, bool) {
 		return cmd, true
 	}
 	return cmd, false
-}
-
-func runCmd(cmd string, t *terminal.Terminal, config *pkg.Config) bool {
-	tokens := tokenize(strings.TrimSpace(strings.TrimSuffix(cmd, ";")))
-
-	commands := map[string]struct {
-		Help string
-		Run  func(args []string, t *terminal.Terminal, config *pkg.Config) error
-	}{
-		"\\config": {
-			Run:  execConfig,
-			Help: "Edit runtime configuration",
-		},
-	}
-
-	commandName := tokens[0]
-	if commandName[0] == '\\' {
-		cmd, ok := commands[commandName]
-		if !ok {
-			slog.Error("Command not found", "value", commandName)
-		} else {
-			err := cmd.Run(tokens[1:], t, config)
-			if err != nil {
-				slog.Error("Command execution failed", "err", err)
-			}
-		}
-		return true
-	}
-	return false
-}
-
-func tokenize(cmd string) []string {
-	tokens := []string{}
-
-	var token []rune
-	for _, chr := range cmd {
-		if unicode.IsSpace(chr) {
-			if len(token) > 0 {
-				tokens = append(tokens, string(token))
-				token = []rune{}
-			}
-		} else {
-			token = append(token, chr)
-		}
-	}
-
-	if len(token) > 0 {
-		tokens = append(tokens, string(token))
-	}
-	return tokens
-}
-
-type Accessor struct {
-	get func() string
-	set func(value string) error
-}
-
-func IntValueAccessor(addr *int) Accessor {
-	return Accessor{
-		get: func() string {
-			return fmt.Sprintf("%d", *addr)
-		},
-		set: func(value string) error {
-			parsed, err := strconv.Atoi(value)
-			if err != nil {
-				return err
-			}
-			*addr = parsed
-			return nil
-		},
-	}
-}
-
-func execConfig(tokens []string, t *terminal.Terminal, config *pkg.Config) error {
-	if len(tokens) == 0 {
-		return fmt.Errorf("\\config {show,set}")
-	}
-
-	configs := map[string]struct {
-		get func() string
-		set func(string) error
-	}{
-		"histsize":  IntValueAccessor(&t.History.Size),
-		"autolimit": IntValueAccessor(&t.RowLimit),
-		"tabsize":   IntValueAccessor(&t.TabSize),
-	}
-
-	switch tokens[0] {
-	case "get":
-		result := ResultSet{
-			Headers: []string{"Name", "Value"},
-		}
-
-		if len(tokens) > 1 {
-			name := tokens[1]
-			c, ok := configs[name]
-			if !ok {
-				return fmt.Errorf("config %s does not exist")
-			}
-
-			result.Rows = [][]string{
-				{name, c.get()},
-			}
-		} else {
-			for name, attr := range configs {
-				result.Rows = append(result.Rows, []string{
-					name, attr.get(),
-				})
-			}
-		}
-
-		display(&result)
-
-	case "set":
-		if len(tokens) > 1 {
-			name := tokens[1]
-			c, ok := configs[name]
-			if !ok {
-				return fmt.Errorf("config %s does not exist")
-			}
-
-			return c.set(tokens[2])
-		}
-		return fmt.Errorf("config set <name> <value>")
-
-	case "reset":
-		loadconfig(t, config)
-
-	default:
-		return fmt.Errorf("\\config {get,set}")
-	}
-	return nil
 }
 
 func display(result *ResultSet) {
