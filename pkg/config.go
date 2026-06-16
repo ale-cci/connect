@@ -55,12 +55,13 @@ type User struct {
 }
 
 type ConnectionInfo struct {
-	Host      string `yaml:"host"`
-	Port      int    `yaml:"port"`
-	UserAlias string `yaml:"alias"`
-	Database  string `yaml:"database"`
-	Tunnel    string `yaml:"tunnel"`
-	Driver    string `yaml:"driver"`
+	Host      string   `yaml:"host"`
+	Port      int      `yaml:"port"`
+	UserAlias string   `yaml:"alias"`
+	Database  string   `yaml:"database"`
+	Tunnel    string   `yaml:"tunnel"`
+	Driver    string   `yaml:"driver"`
+	Tag       []string `yaml:"tag"`
 }
 
 type ConfigOptions struct {

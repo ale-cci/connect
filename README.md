@@ -8,27 +8,31 @@ go install codeberg.org/ale-cci/connect/cmd/connect-manager@latest
 ```
 $ connect-manager import connection-file.csv
 $ connect database-alias
+$ connect-dump database-alias blueprint.yaml -p param1=value1 -p param2=value2 -o file.sql
+$ connect-dump database-alias blueprint.yaml --params=params.json -o file.sql
 ```
 
 # Possible next features
 - [x] load configurations from csv file
 - [x] ssh tunnel management
+- [x] Reverse history search
+- [x] save history to file
 
-- [ ] Reverse history search
 - [ ] correctly display tables with multiline strings
-- [ ] Build showing the current git version
-- [ ] save history to file
 - [ ] query autocompletion
 
-- [ ] custom commands
-    - /set rowlimit 100
-    - /set tabsize 4
-    - /save tabsize
-    - /save all
-    - /show tabsize
-    - /dump filename.xyz select xyz from tablename
+- [x] custom commands
+    - \config set rowlimit 100
+    - \config set tabsize 4
+    - \config get tabsize
+    - \config get
+
+- [ ] more commands
+    - \export filename.sql <blueprint>
     - !! expands to previous query
 
+
+- [ ] Build showing the current git version
 - [ ] syntax highlight
 - [ ] docs
 - [ ] Release history
