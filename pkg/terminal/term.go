@@ -27,6 +27,9 @@ type Terminal struct {
 	display [][]rune
 
 	History History
+
+	Fd    int
+	State *State
 }
 
 const (
@@ -34,6 +37,7 @@ const (
 	CTRL_D = 'd' & 0x1f
 	CTRL_L = 'l' & 0x1f
 	CTRL_W = 'w' & 0x1f
+	CTRL_Z = 'z' & 0x1f
 
 	CTRL_A = 'a' & 0x1f
 	CTRL_E = 'e' & 0x1f
@@ -71,6 +75,10 @@ func (t *Terminal) ReadCmd() (cmd string, err error) {
 			t.Input.ReadByte()
 			t.clearCmd()
 			return "", nil
+
+		case CTRL_Z:
+			t.Input.ReadByte()
+			t.handleSuspend()
 
 		case CTRL_P:
 			t.Input.ReadByte()
@@ -616,4 +624,25 @@ func MakeRaw(fd int) (*State, error) {
 
 func Restore(fd int, state *State) error {
 	return unix.IoctlSetTermios(fd, ioctlWriteTermios, &state.termios)
+}
+
+func (t *Terminal) handleSuspend() {
+	if t.State == nil {
+		return
+	}
+	// 1. Restore the terminal state to cooked
+	Restore(t.Fd, t.State)
+
+	// 2. Send SIGTSTP to ourselves
+	unix.Kill(unix.Getpid(), unix.SIGTSTP)
+
+	// 3. Re-enter raw mode after resume
+	newState, err := MakeRaw(t.Fd)
+	if err == nil {
+		t.State = newState
+	}
+
+	// 4. Redraw prompt and current command
+	t.clearCmd()
+	t.drawCmd()
 }

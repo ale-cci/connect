@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -123,16 +124,19 @@ func main() {
 		return
 	}
 
-	oldState, err := terminal.MakeRaw(int(os.Stdin.Fd()))
+	fdStdin := int(os.Stdin.Fd())
+	oldState, err := terminal.MakeRaw(fdStdin)
 	if err != nil {
 		panic(err)
 	}
-	defer terminal.Restore(int(os.Stdin.Fd()), oldState)
+	defer terminal.Restore(fdStdin, oldState)
 
 	t := terminal.Terminal{
 		Input:  *bufio.NewReader(os.Stdin),
 		Output: os.Stdout,
 		Prompt: "> ",
+		Fd:     fdStdin,
+		State:  oldState,
 	}
 	loadconfig(&t, &config)
 
@@ -218,22 +222,34 @@ func AddLimit(cmd string, limit int) (string, bool) {
 }
 
 func display(result *ResultSet) {
+	writeTable(os.Stdout, result)
+}
+
+func writeTable(w io.Writer, result *ResultSet) {
 	colSize := []int{}
 	for _, header := range result.Headers {
 		colSize = append(colSize, len(header))
 	}
-	for _, row := range result.Rows {
-		for idx, value := range row {
-			colSize[idx] = max(colSize[idx], len(value))
+
+	// Split all row cells into lines and find max width per column
+	splitRows := make([][][]string, len(result.Rows))
+	for rIdx, row := range result.Rows {
+		splitRows[rIdx] = make([][]string, len(row))
+		for cIdx, value := range row {
+			lines := strings.Split(value, "\n")
+			splitRows[rIdx][cIdx] = lines
+			for _, line := range lines {
+				colSize[cIdx] = max(colSize[cIdx], len(line))
+			}
 		}
 	}
 
 	printSep := func() {
-		fmt.Printf(" +")
+		fmt.Fprint(w, " +")
 		for _, size := range colSize {
-			fmt.Print(strings.Repeat("-", size+2), "+")
+			fmt.Fprint(w, strings.Repeat("-", size+2), "+")
 		}
-		fmt.Print("\n")
+		fmt.Fprint(w, "\n")
 	}
 
 	printSep()
@@ -249,16 +265,32 @@ func display(result *ResultSet) {
 			}
 			return '•'
 		}, hdr)
-		fmt.Printf(fmts[i], hdr)
+		fmt.Fprintf(w, fmts[i], hdr)
 	}
-	fmt.Print(" |\n")
+	fmt.Fprint(w, " |\n")
 	printSep()
 
-	for _, row := range result.Rows {
-		for i, item := range row {
-			fmt.Printf(fmts[i], item)
+	for _, splitRow := range splitRows {
+		// Determine the height of this row
+		rowHeight := 0
+		for _, cellLines := range splitRow {
+			rowHeight = max(rowHeight, len(cellLines))
 		}
-		fmt.Print(" |\n")
+
+		// Print each sub-line for the row
+		for lineIdx := 0; lineIdx < rowHeight; lineIdx++ {
+			for colIdx := range colSize {
+				var lineText string
+				if colIdx < len(splitRow) {
+					cellLines := splitRow[colIdx]
+					if lineIdx < len(cellLines) {
+						lineText = cellLines[lineIdx]
+					}
+				}
+				fmt.Fprintf(w, fmts[colIdx], lineText)
+			}
+			fmt.Fprint(w, " |\n")
+		}
 	}
 	printSep()
 }
@@ -303,4 +335,171 @@ func runQuery(db *sql.DB, cmd string) (results *ResultSet, err error) {
 type ResultSet struct {
 	Headers []string
 	Rows    [][]string
+}
+
+type Command struct {
+	Help string
+	Run  func(args []string, t *terminal.Terminal, commands map[string]Command, config *pkg.Config) error
+}
+
+var commands map[string]Command
+
+func init() {
+	commands = map[string]Command{
+		"\\config": {
+			Run:  execConfig,
+			Help: "Edit runtime configuration",
+		},
+		"\\help": {
+			Run:  execHelp,
+			Help: "Run this command",
+		},
+		"\\schema": {
+			Run:  execDump,
+			Help: "salva lo schema del database su file",
+		},
+	}
+}
+
+func IsCommand(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) == 0 {
+		return false
+	}
+	return s[0] == '\\'
+}
+
+func tokenize(cmd string) []string {
+	tokens := []string{}
+
+	var token []rune
+	for _, chr := range cmd {
+		if unicode.IsSpace(chr) {
+			if len(token) > 0 {
+				tokens = append(tokens, string(token))
+				token = []rune{}
+			}
+		} else {
+			token = append(token, chr)
+		}
+	}
+
+	if len(token) > 0 {
+		tokens = append(tokens, string(token))
+	}
+	return tokens
+}
+
+func RunCommand(cmd string, db *sql.DB, t *terminal.Terminal, config *pkg.Config) error {
+	tokens := tokenize(strings.TrimSpace(strings.TrimSuffix(cmd, ";")))
+
+	commandName := tokens[0]
+
+	command, ok := commands[commandName]
+	if !ok {
+		slog.Error("Command not found", "value", commandName)
+	} else {
+		err := command.Run(tokens[1:], t, commands, config)
+		if err != nil {
+			slog.Error("Command execution failed", "err", err)
+		}
+	}
+
+	return nil
+}
+
+func execHelp(args []string, t *terminal.Terminal, commands map[string]Command, config *pkg.Config) error {
+	fmt.Println("Comandi disponibili:")
+
+	for name, cmd := range commands {
+		fmt.Printf(" %8s: %s\n", name, cmd.Help)
+	}
+	fmt.Println("")
+	return nil
+}
+
+type Accessor struct {
+	get func() string
+	set func(value string) error
+}
+
+func IntValueAccessor(addr *int) Accessor {
+	return Accessor{
+		get: func() string {
+			return fmt.Sprintf("%d", *addr)
+		},
+		set: func(value string) error {
+			parsed, err := strconv.Atoi(value)
+			if err != nil {
+				return err
+			}
+			*addr = parsed
+			return nil
+		},
+	}
+}
+
+func execConfig(tokens []string, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
+	if len(tokens) == 0 {
+		return fmt.Errorf("\\config {show,set}")
+	}
+
+	configs := map[string]struct {
+		get func() string
+		set func(string) error
+	}{
+		"histsize":  IntValueAccessor(&t.History.Size),
+		"autolimit": IntValueAccessor(&t.RowLimit),
+		"tabsize":   IntValueAccessor(&t.TabSize),
+	}
+
+	switch tokens[0] {
+	case "get":
+		result := ResultSet{
+			Headers: []string{"Name", "Value"},
+		}
+
+		if len(tokens) > 1 {
+			name := tokens[1]
+			c, ok := configs[name]
+			if !ok {
+				return fmt.Errorf("config %s does not exist", name)
+			}
+
+			result.Rows = [][]string{
+				{name, c.get()},
+			}
+		} else {
+			for name, attr := range configs {
+				result.Rows = append(result.Rows, []string{
+					name, attr.get(),
+				})
+			}
+		}
+
+		display(&result)
+
+	case "set":
+		if len(tokens) > 1 {
+			name := tokens[1]
+			c, ok := configs[name]
+			if !ok {
+				return fmt.Errorf("config %s does not exist", name)
+			}
+
+			return c.set(tokens[2])
+		}
+		return fmt.Errorf("config set <name> <value>")
+
+	case "reset":
+		loadconfig(t, config)
+
+	default:
+		return fmt.Errorf("\\config {get,set}")
+	}
+	return nil
+}
+
+func execDump(tokens []string, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
+	return nil
 }

@@ -18,8 +18,7 @@ $ connect-dump database-alias blueprint.yaml --params=params.json -o file.sql
 - [x] Reverse history search
 - [x] save history to file
 
-- [ ] correctly display tables with multiline strings
-- [ ] query autocompletion
+- [x] correctly display tables with multiline strings
 
 - [x] custom commands
     - \config set rowlimit 100
@@ -32,9 +31,9 @@ $ connect-dump database-alias blueprint.yaml --params=params.json -o file.sql
     - !! expands to previous query
 
 
-- [ ] Build showing the current git version
 - [ ] syntax highlight
-- [ ] docs
+- [ ] project documentation
+- [ ] Build showing the current git version
 - [ ] Release history
 
 #### useful links
