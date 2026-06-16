@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -33,28 +32,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	portOpt := 0
+	httpOpt := ""
 	alias := ""
 
-	// Manual parsing of -port / --port to keep --completions and -v clean
+	// Manual parsing of -http / --http to keep --completions and -v clean
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
-		if arg == "-port" || arg == "--port" {
+		if arg == "-http" || arg == "--http" {
 			if i+1 < len(os.Args) {
-				var err error
-				portOpt, err = strconv.Atoi(os.Args[i+1])
-				if err != nil {
-					slog.Error("Porta non valida", "val", os.Args[i+1], "err", err)
-					os.Exit(1)
-				}
+				httpOpt = os.Args[i+1]
 				i++ // skip the value
 			} else {
-				slog.Error("Opzione -port richiede un valore")
+				slog.Error("Opzione -http richiede un valore (es. :8000)")
 				os.Exit(1)
 			}
 		} else if strings.HasPrefix(arg, "-") && arg != "-v" && arg != "--version" && arg != "--completions" {
 			slog.Error("Opzione non riconosciuta", "opt", arg)
-			fmt.Fprintf(os.Stderr, "Usage: connect-mcp [-port <port>] <alias>\n")
+			fmt.Fprintf(os.Stderr, "Usage: connect-mcp [-http <host:port>] <alias>\n")
 			os.Exit(1)
 		} else {
 			alias = arg
@@ -63,7 +57,7 @@ func main() {
 
 	if alias == "" {
 		slog.Error("alias obbligatorio per collegarsi a db in modalità MCP")
-		fmt.Fprintf(os.Stderr, "Usage: connect-mcp [-port <port>] <alias>\n")
+		fmt.Fprintf(os.Stderr, "Usage: connect-mcp [-http <host:port>] <alias>\n")
 		os.Exit(1)
 	}
 
@@ -143,17 +137,46 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = StartMcpServer(db, info.Database, portOpt)
+	err = StartMcpServer(db, info.Database, httpOpt)
 	if err != nil {
 		slog.Error("MCP server failed", "err", err)
 		os.Exit(1)
 	}
 }
 
-// StartMcpServer starts the MCP server using SSE transport and prints its address to stdout
-func StartMcpServer(db *sql.DB, schemaName string, portOpt int) error {
-	slog.Info("Initializing MCP server for database", "schema", schemaName)
+// StartMcpServer starts the MCP server in stdio mode by default, or in HTTP (SSE) mode if httpOpt is specified.
+func StartMcpServer(db *sql.DB, schemaName string, httpOpt string) error {
+	s := createMcpServer(db, schemaName)
 
+	if httpOpt == "" {
+		slog.Info("Starting MCP server in stdio mode")
+		return server.ServeStdio(s)
+	}
+
+	addr := httpOpt
+	var host string
+	if strings.HasPrefix(addr, ":") {
+		host = "localhost" + addr
+	} else {
+		host = addr
+	}
+
+	// Create SSE Server
+	sseServer := server.NewSSEServer(s, server.WithBaseURL(fmt.Sprintf("http://%s", host)))
+
+	// Print the actual SSE server URL to stdout
+	fmt.Printf("http://%s/sse\n", host)
+
+	slog.Info("Starting SSE transport for connect-mysql-mcp", "addr", addr)
+	if err := sseServer.Start(addr); err != nil {
+		slog.Error("MCP server SSE transport failed", "err", err)
+		return err
+	}
+
+	return nil
+}
+
+func createMcpServer(db *sql.DB, schemaName string) *server.MCPServer {
 	// Create a new MCP server
 	s := server.NewMCPServer(
 		"connect-mysql-mcp",
@@ -222,50 +245,14 @@ func StartMcpServer(db *sql.DB, schemaName string, portOpt int) error {
 		return mcp.NewToolResultText(jsonStr), nil
 	})
 
-	port := portOpt
-	if port == 0 {
-		var err error
-		port, err = findFreePort()
-		if err != nil {
-			slog.Error("Failed to allocate a free port", "err", err)
-			return err
-		}
-	}
-
-	// Create SSE Server
-	sseServer := server.NewSSEServer(s, server.WithBaseURL(fmt.Sprintf("http://localhost:%d", port)))
-
-	// Print the actual SSE server URL to stdout as requested by the user
-	fmt.Printf("http://localhost:%d/sse\n", port)
-
-	slog.Info("Starting SSE transport for connect-mysql-mcp", "port", port)
-	if err := sseServer.Start(fmt.Sprintf(":%d", port)); err != nil {
-		slog.Error("MCP server SSE transport failed", "err", err)
-		return err
-	}
-
-	return nil
-}
-
-// findFreePort locates an available TCP port on localhost
-func findFreePort() (int, error) {
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	l, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+	return s
 }
 
 // executeSQLToJSON runs a SQL query and serializes the resulting rows (or rows affected) into indented JSON
 func executeSQLToJSON(db *sql.DB, query string) (string, error) {
 	trimmed := strings.TrimSpace(query)
 	if len(trimmed) == 0 {
-		return "[]", nil
+		return `{"results": []}`, nil
 	}
 
 	// Simple routing: if it is a write command, run Exec; otherwise use Query
@@ -325,10 +312,14 @@ func executeSQLToJSON(db *sql.DB, query string) (string, error) {
 	}
 
 	if len(results) == 0 {
-		return "[]", nil
+		return `{"results": []}`, nil
 	}
 
-	bytes, err := json.MarshalIndent(results, "", "  ")
+	type queryResult struct {
+		Results []map[string]any `json:"results"`
+	}
+
+	bytes, err := json.MarshalIndent(queryResult{Results: results}, "", "  ")
 	if err != nil {
 		return "", err
 	}
@@ -387,7 +378,11 @@ func describeTable(db *sql.DB, schemaName, tableName string) (string, error) {
 		return fmt.Sprintf("Table %q not found in schema %q.", tableName, schemaName), nil
 	}
 
-	bytes, err := json.MarshalIndent(results, "", "  ")
+	type tableColumns struct {
+		Columns []map[string]any `json:"columns"`
+	}
+
+	bytes, err := json.MarshalIndent(tableColumns{Columns: results}, "", "  ")
 	if err != nil {
 		return "", err
 	}
