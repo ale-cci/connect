@@ -25,17 +25,20 @@ Ensure you have Go 1.22+ installed, then run the installation commands for the c
 
 ```bash
 # Install the interactive SQL database CLI
-go install codeberg.org/ale-cci/connect/cmd/connect@latest
+go install codeberg.org/ale-cci/connect/cmd/connect@master
 
 # Install the Model Context Protocol (MCP) server
-go install codeberg.org/ale-cci/connect/cmd/connect-mcp@latest
+go install codeberg.org/ale-cci/connect/cmd/connect-mcp@master
 
 # Install the database connections manager (CSV importer)
-go install codeberg.org/ale-cci/connect/cmd/connect-manager@latest
+go install codeberg.org/ale-cci/connect/cmd/connect-manager@master
 
 # Install the standalone tunneling manager
-go install codeberg.org/ale-cci/connect/cmd/tunnel@latest
+go install codeberg.org/ale-cci/connect/cmd/tunnel@master
 ```
+
+> [!TIP]
+> **Pre-release / Beta Version:** If you want to install the latest pre-release or beta versions of these tools, simply replace `@master` with `@beta` in the commands above (e.g., `go install ...@beta`).
 
 ---
 
