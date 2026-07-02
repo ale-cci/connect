@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -339,7 +340,7 @@ type ResultSet struct {
 
 type Command struct {
 	Help string
-	Run  func(args []string, t *terminal.Terminal, commands map[string]Command, config *pkg.Config) error
+	Run  func(args []string, db *sql.DB, t *terminal.Terminal, commands map[string]Command, config *pkg.Config) error
 }
 
 var commands map[string]Command
@@ -354,9 +355,13 @@ func init() {
 			Run:  execHelp,
 			Help: "Run this command",
 		},
-		"\\schema": {
+		"\\dump": {
 			Run:  execDump,
-			Help: "salva lo schema del database su file",
+			Help: "Esegue una query e salva i risultati come istruzioni INSERT in un file dump-nome_tabella-data-ora.sql",
+		},
+		"\\schema": {
+			Run:  execSchema,
+			Help: "Salva lo schema (DDL) delle tabelle corrispondenti al pattern in un file schema-pattern-data-ora.sql",
 		},
 	}
 }
@@ -399,7 +404,7 @@ func RunCommand(cmd string, db *sql.DB, t *terminal.Terminal, config *pkg.Config
 	if !ok {
 		slog.Error("Command not found", "value", commandName)
 	} else {
-		err := command.Run(tokens[1:], t, commands, config)
+		err := command.Run(tokens[1:], db, t, commands, config)
 		if err != nil {
 			slog.Error("Command execution failed", "err", err)
 		}
@@ -408,7 +413,7 @@ func RunCommand(cmd string, db *sql.DB, t *terminal.Terminal, config *pkg.Config
 	return nil
 }
 
-func execHelp(args []string, t *terminal.Terminal, commands map[string]Command, config *pkg.Config) error {
+func execHelp(args []string, db *sql.DB, t *terminal.Terminal, commands map[string]Command, config *pkg.Config) error {
 	fmt.Println("Comandi disponibili:")
 
 	for name, cmd := range commands {
@@ -439,7 +444,7 @@ func IntValueAccessor(addr *int) Accessor {
 	}
 }
 
-func execConfig(tokens []string, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
+func execConfig(tokens []string, db *sql.DB, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
 	if len(tokens) == 0 {
 		return fmt.Errorf("\\config {show,set}")
 	}
@@ -500,6 +505,265 @@ func execConfig(tokens []string, t *terminal.Terminal, _ map[string]Command, con
 	return nil
 }
 
-func execDump(tokens []string, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
+func execDump(tokens []string, db *sql.DB, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
+	if len(tokens) == 0 {
+		return fmt.Errorf("sintassi: \\dump <select_query>")
+	}
+
+	query := strings.Join(tokens, " ")
+	tableName := extractTableName(query)
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return fmt.Errorf("errore durante l'esecuzione della query: %w", err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		return fmt.Errorf("errore nel recupero delle colonne: %w", err)
+	}
+
+	filename := "dump-" + tableName + "-" + time.Now().Format("20060102-1504") + ".sql"
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("errore nella creazione del file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	// Write header comments
+	fmt.Fprintf(file, "-- Dump generato il %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(file, "-- Query: %s\n", query)
+	fmt.Fprintf(file, "-- Tabella: %s\n\n", tableName)
+
+	// Wrap columns in backticks to prevent issues with reserved SQL words
+	colNames := make([]string, len(columns))
+	for i, col := range columns {
+		colNames[i] = "`" + col + "`"
+	}
+	colsStr := strings.Join(colNames, ", ")
+
+	// Prepare values scanning
+	values := make([]any, len(columns))
+	valuePtrs := make([]any, len(columns))
+	for i := range values {
+		valuePtrs[i] = &values[i]
+	}
+
+	rowCount := 0
+	for rows.Next() {
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return fmt.Errorf("errore durante lo scan dei risultati: %w", err)
+		}
+
+		vals := make([]string, len(columns))
+		for i, val := range values {
+			vals[i] = formatValue(val)
+		}
+		valsStr := strings.Join(vals, ", ")
+
+		// Format as INSERT INTO `table` (`col1`, `col2`) VALUES ('val1', 'val2');
+		fmt.Fprintf(file, "INSERT INTO `%s` (%s) VALUES (%s);\n", tableName, colsStr, valsStr)
+		rowCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("errore durante l'iterazione delle righe: %w", err)
+	}
+
+	fmt.Printf("Dump completato: %d righe salvate in %s\n", rowCount, filename)
 	return nil
+}
+
+func extractTableName(query string) string {
+	re := regexp.MustCompile(`(?i)\bfrom\s+([a-zA-Z0-9_\x60\x22.-]+)`)
+	matches := re.FindStringSubmatch(query)
+	if len(matches) < 2 {
+		return "dumped_table"
+	}
+	tableName := matches[1]
+	tableName = strings.ReplaceAll(tableName, "`", "")
+	tableName = strings.ReplaceAll(tableName, "\"", "")
+	return tableName
+}
+
+func formatValue(val any) string {
+	if val == nil {
+		return "NULL"
+	}
+
+	switch v := val.(type) {
+	case string:
+		return "'" + escapeSQLString(v) + "'"
+	case []byte:
+		return "'" + escapeSQLString(string(v)) + "'"
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", v)
+	case float32, float64:
+		return fmt.Sprintf("%g", v)
+	case bool:
+		if v {
+			return "1"
+		}
+		return "0"
+	case time.Time:
+		return "'" + v.Format("2006-01-02 15:04:05") + "'"
+	default:
+		return "'" + escapeSQLString(fmt.Sprintf("%v", v)) + "'"
+	}
+}
+
+func escapeSQLString(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "'", "''")
+	return s
+}
+
+func buildSchemaQuery(pattern string) string {
+	escapedPattern := escapeSQLString(pattern)
+	return fmt.Sprintf("SHOW TABLES LIKE '%s'", escapedPattern)
+}
+
+func execSchema(tokens []string, db *sql.DB, t *terminal.Terminal, _ map[string]Command, config *pkg.Config) error {
+	if len(tokens) == 0 {
+		return fmt.Errorf("sintassi: \\schema <pattern>")
+	}
+
+	pattern := strings.Join(tokens, " ")
+
+	// Find tables matching the pattern using dynamically built query to be immune to prepared statement bugs or limitations
+	query := buildSchemaQuery(pattern)
+	rows, err := db.Query(query)
+	if err != nil {
+		return fmt.Errorf("errore nel recupero delle tabelle con pattern %s: %w", pattern, err)
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		if err := rows.Scan(&table); err != nil {
+			return fmt.Errorf("errore durante lo scan dei nomi delle tabelle: %w", err)
+		}
+		tables = append(tables, table)
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("errore durante l'iterazione delle tabelle: %w", err)
+	}
+
+	if len(tables) == 0 {
+		fmt.Printf("Nessuna tabella trovata corrispondente al pattern: %s\n", pattern)
+		return nil
+	}
+
+	// Create safe filename
+	cleanPattern := strings.ReplaceAll(pattern, "%", "all")
+	reClean := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+	cleanPattern = reClean.ReplaceAllString(cleanPattern, "_")
+
+	filename := "schema-" + cleanPattern + "-" + time.Now().Format("20060102-1504") + ".sql"
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("errore nella creazione del file %s: %w", filename, err)
+	}
+	defer file.Close()
+
+	// Write header comments
+	fmt.Fprintf(file, "-- Schema generato il %s\n", time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(file, "-- Pattern: %s\n", pattern)
+	fmt.Fprintf(file, "-- Tabelle trovate: %s\n\n", strings.Join(tables, ", "))
+
+	autoIncrementRe := regexp.MustCompile(`(?i)\s*\bAUTO_INCREMENT\s*=\s*\d+`)
+
+	schemaCount := 0
+	for _, table := range tables {
+		rows, err := db.Query(fmt.Sprintf("SHOW CREATE TABLE `%s`", table))
+		if err != nil {
+			return fmt.Errorf("errore nel recupero ddl per la tabella %s: %w", table, err)
+		}
+
+		if !rows.Next() {
+			rows.Close()
+			return fmt.Errorf("nessun risultato ddl per la tabella %s", table)
+		}
+
+		cols, err := rows.Columns()
+		if err != nil {
+			rows.Close()
+			return fmt.Errorf("errore nel recupero delle colonne ddl per la tabella %s: %w", table, err)
+		}
+
+		vals := make([]any, len(cols))
+		valPtrs := make([]any, len(cols))
+		for i := range vals {
+			valPtrs[i] = &vals[i]
+		}
+
+		if err := rows.Scan(valPtrs...); err != nil {
+			rows.Close()
+			return fmt.Errorf("errore durante lo scan ddl per la tabella %s: %w", table, err)
+		}
+		rows.Close()
+
+		createSQL, err := extractDDL(cols, vals)
+		if err != nil {
+			return fmt.Errorf("errore nell'estrazione ddl per la tabella %s: %w", table, err)
+		}
+
+		// Elide auto-increment if present
+		createSQL = autoIncrementRe.ReplaceAllString(createSQL, "")
+
+		// Elide database prefix if present
+		createSQL = elideDatabasePrefix(createSQL, table)
+
+		fmt.Fprintf(file, "-- Struttura della tabella: %s\n", table)
+		fmt.Fprintf(file, "%s;\n\n", createSQL)
+		schemaCount++
+	}
+
+	fmt.Printf("Schema completato: %d definizioni salvate in %s\n", schemaCount, filename)
+	return nil
+}
+
+func elideDatabasePrefix(createSQL, tableName string) string {
+	// Pattern for backticked prefix: `mydb`.`table_name` -> `table_name`
+	reBacktick := regexp.MustCompile(fmt.Sprintf("(?i)`[a-zA-Z0-9_-]+`\\.`%s`", regexp.QuoteMeta(tableName)))
+	createSQL = reBacktick.ReplaceAllString(createSQL, "`"+tableName+"`")
+
+	// Pattern for double-quoted prefix: "mydb"."table_name" -> "table_name"
+	reQuote := regexp.MustCompile(fmt.Sprintf("(?i)\"[a-zA-Z0-9_-]+\"\\.\"%s\"", regexp.QuoteMeta(tableName)))
+	createSQL = reQuote.ReplaceAllString(createSQL, "\""+tableName+"\"")
+
+	// Pattern for unquoted prefix: mydb.table_name -> table_name
+	reUnquoted := regexp.MustCompile(fmt.Sprintf("(?i)\\b[a-zA-Z0-9_-]+\\.%s\\b", regexp.QuoteMeta(tableName)))
+	createSQL = reUnquoted.ReplaceAllString(createSQL, tableName)
+
+	return createSQL
+}
+
+func extractDDL(cols []string, vals []any) (string, error) {
+	if len(cols) == 0 || len(vals) < len(cols) {
+		return "", fmt.Errorf("colonne o valori non validi")
+	}
+
+	var ddl any
+	if len(cols) >= 2 {
+		ddl = vals[1]
+	} else {
+		ddl = vals[0]
+	}
+
+	if ddl == nil {
+		return "", fmt.Errorf("ddl nullo")
+	}
+
+	switch v := ddl.(type) {
+	case string:
+		return v, nil
+	case []byte:
+		return string(v), nil
+	default:
+		return fmt.Sprintf("%v", v), nil
+	}
 }

@@ -26,4 +26,4 @@ In addition to standard SQL queries, you can execute client-specific commands:
 - `\help` - Display available commands.
 - `\config get` - View runtime settings.
 - `\config set <name> <value>` - Dynamically change options on the fly (e.g., `\config set autolimit 50`).
-- `\schema` - Saves the active database schema information.
+- `\dump <query>` - Esegue una query e salva i risultati come istruzioni INSERT in un file dump-nome_tabella-data-ora.sql.

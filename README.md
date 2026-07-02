@@ -102,7 +102,7 @@ options:
 
 Connect is split into modular tools. Each subdirectory has its own dedicated, in-depth documentation:
 
-*   [**`connect` (Interactive CLI)**](./cmd/connect/README.md): Detailed mechanics of the interactive SQL shell, query navigation shortcuts, vertical alignment tables, and custom slash commands (`\config`, `\schema`, etc.).
+*   [**`connect` (Interactive CLI)**](./cmd/connect/README.md): Detailed mechanics of the interactive SQL shell, query navigation shortcuts, vertical alignment tables, and custom slash commands (`\config`, `\dump`, etc.).
 *   [**`connect-mcp` (Model Context Protocol Server)**](./cmd/connect-mcp/README.md): Step-by-step Claude Desktop integration, STDIO vs HTTP SSE configurations, and LLM tools description.
 *   [**`connect-manager` (Bulk Configuration)**](./cmd/connect-manager/README.md): Format of the CSV file used to import/manage connection metadata and alias bindings.
 *   [**`tunnel` (Standalone Port-Forwarding)**](./cmd/tunnel/README.md): Standalone command usage for tunneling Unix/TCP connections over SSH.
