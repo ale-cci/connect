@@ -273,3 +273,61 @@ func TestElideDatabasePrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "Single statement with semicolon",
+			input:    "select 1;",
+			expected: []string{"select 1;"},
+		},
+		{
+			name:     "Multiple statements",
+			input:    "select 1; select 2;",
+			expected: []string{"select 1;", "select 2;"},
+		},
+		{
+			name:     "Single quote with semicolon",
+			input:    "select 'hello; world'; select 2;",
+			expected: []string{"select 'hello; world';", "select 2;"},
+		},
+		{
+			name:     "Double quote with semicolon",
+			input:    `select "hello; world"; select 3;`,
+			expected: []string{`select "hello; world";`, "select 3;"},
+		},
+		{
+			name:     "Escaped quote",
+			input:    "select 'hello\\'; world'; select 4;",
+			expected: []string{"select 'hello\\'; world';", "select 4;"},
+		},
+		{
+			name:     "No trailing semicolon",
+			input:    "select 1; select 2",
+			expected: []string{"select 1;", "select 2"},
+		},
+		{
+			name:     "Newlines and whitespace",
+			input:    "  \n select 1;\n\nselect 2;  \n",
+			expected: []string{"select 1;", "select 2;"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := splitStatements(tt.input)
+			if len(got) != len(tt.expected) {
+				t.Fatalf("expected %d statements, got %d: %q", len(tt.expected), len(got), got)
+			}
+			for i, stmt := range got {
+				if stmt != tt.expected[i] {
+					t.Errorf("at index %d: expected %q, got %q", i, tt.expected[i], stmt)
+				}
+			}
+		})
+	}
+}

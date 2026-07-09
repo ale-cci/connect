@@ -226,3 +226,10 @@ func TestPreviousReturnsItem(t *testing.T) {
 		t.Errorf("expected command, got %v", cmd)
 	}
 }
+
+func TestIsTerminal(t *testing.T) {
+	// Standard test runners don't have standard input attached to a terminal, so IsTerminal(0) should be false.
+	if terminal.IsTerminal(0) {
+		t.Errorf("expected IsTerminal(0) to be false in non-interactive test environment")
+	}
+}

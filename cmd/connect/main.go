@@ -126,84 +126,136 @@ func main() {
 	}
 
 	fdStdin := int(os.Stdin.Fd())
-	oldState, err := terminal.MakeRaw(fdStdin)
-	if err != nil {
-		panic(err)
-	}
-	defer terminal.Restore(fdStdin, oldState)
+	if terminal.IsTerminal(fdStdin) {
+		oldState, err := terminal.MakeRaw(fdStdin)
+		if err != nil {
+			panic(err)
+		}
+		defer terminal.Restore(fdStdin, oldState)
 
-	t := terminal.Terminal{
-		Input:  *bufio.NewReader(os.Stdin),
-		Output: os.Stdout,
-		Prompt: "> ",
-		Fd:     fdStdin,
-		State:  oldState,
-	}
-	loadconfig(&t, &config)
+		t := terminal.Terminal{
+			Input:  *bufio.NewReader(os.Stdin),
+			Output: os.Stdout,
+			Prompt: "> ",
+			Fd:     fdStdin,
+			State:  oldState,
+		}
+		loadconfig(&t, &config)
 
-	histfilePath := pkg.ConfigPath("history.txt")
-	fd, err := os.Open(histfilePath)
-	if err == nil {
-		t.History.Load(fd)
-		fd.Close()
-	} else {
-		slog.Debug("Failed to read history", "err", err)
-	}
-
-	defer func() {
-		fd, err := os.Create(histfilePath)
+		histfilePath := pkg.ConfigPath("history.txt")
+		fd, err := os.Open(histfilePath)
 		if err == nil {
-			t.History.Save(fd)
+			t.History.Load(fd)
 			fd.Close()
-		}
-	}()
-
-	for {
-		cmd, err := t.ReadCmd()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			slog.Error("An error has occurred:", "err", err)
-			continue
-		}
-		slog.Debug("executing command", "cmd", cmd)
-
-		start := time.Now()
-
-		var result *ResultSet
-
-		if cmd == "" {
-			fmt.Println("^C")
-			continue
-		}
-		if IsCommand(cmd) {
-			result = nil
-			err = RunCommand(cmd, db, &t, &config)
 		} else {
-			if t.RowLimit > 0 {
-				newcmd, replaced := AddLimit(cmd, t.RowLimit)
-				cmd = newcmd
-				if replaced {
-					slog.Info("Autolimit added", "limit", t.RowLimit)
-				}
-			}
-
-			result, err = runQuery(db, cmd)
+			slog.Debug("Failed to read history", "err", err)
 		}
 
-		elapsed := time.Since(start)
+		defer func() {
+			fd, err := os.Create(histfilePath)
+			if err == nil {
+				t.History.Save(fd)
+				fd.Close()
+			}
+		}()
 
-		if err != nil {
-			slog.Error("Error while running query:", "err", err)
-		} else {
-			if result != nil {
-				if len(result.Headers) > 0 {
-					display(result)
+		for {
+			cmd, err := t.ReadCmd()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
 				}
-				slog.Info("Execution completed", "elapsed", elapsed, "rows", len(result.Rows))
+				slog.Error("An error has occurred:", "err", err)
+				continue
+			}
+			slog.Debug("executing command", "cmd", cmd)
+
+			start := time.Now()
+
+			var result *ResultSet
+
+			if cmd == "" {
+				fmt.Println("^C")
+				continue
+			}
+			if IsCommand(cmd) {
+				result = nil
+				err = RunCommand(cmd, db, &t, &config)
 			} else {
-				slog.Info("Execution completed", "elapsed", elapsed)
+				if t.RowLimit > 0 {
+					newcmd, replaced := AddLimit(cmd, t.RowLimit)
+					cmd = newcmd
+					if replaced {
+						slog.Info("Autolimit added", "limit", t.RowLimit)
+					}
+				}
+
+				result, err = runQuery(db, cmd)
+			}
+
+			elapsed := time.Since(start)
+
+			if err != nil {
+				slog.Error("Error while running query:", "err", err)
+			} else {
+				if result != nil {
+					if len(result.Headers) > 0 {
+						display(result)
+					}
+					slog.Info("Execution completed", "elapsed", elapsed, "rows", len(result.Rows))
+				} else {
+					slog.Info("Execution completed", "elapsed", elapsed)
+				}
+			}
+		}
+	} else {
+		// Non-interactive mode (piped or redirected input)
+		inputBytes, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			slog.Error("Failed to read stdin", "err", err)
+			os.Exit(1)
+		}
+
+		t := terminal.Terminal{
+			Output: os.Stdout,
+			Prompt: "> ",
+			Fd:     fdStdin,
+		}
+		loadconfig(&t, &config)
+
+		statements := splitStatements(string(inputBytes))
+		for _, cmd := range statements {
+			cmd = strings.TrimSpace(cmd)
+			if cmd == "" {
+				continue
+			}
+
+			slog.Debug("executing non-interactive command", "cmd", cmd)
+			start := time.Now()
+
+			var result *ResultSet
+
+			if IsCommand(cmd) {
+				result = nil
+				err = RunCommand(cmd, db, &t, &config)
+			} else {
+				result, err = runQuery(db, cmd)
+			}
+
+			elapsed := time.Since(start)
+
+			if err != nil {
+				slog.Error("Error while running query:", "err", err)
+				os.Exit(1)
+			} else {
+				if result != nil {
+					if len(result.Headers) > 0 {
+						display(result)
+					}
+					slog.Info("Execution completed", "elapsed", elapsed, "rows", len(result.Rows))
+				} else {
+					slog.Info("Execution completed", "elapsed", elapsed)
+				}
 			}
 		}
 	}
@@ -766,4 +818,50 @@ func extractDDL(cols []string, vals []any) (string, error) {
 	default:
 		return fmt.Sprintf("%v", v), nil
 	}
+}
+
+func splitStatements(input string) []string {
+	var statements []string
+	var current strings.Builder
+	inSingleQuote := false
+	inDoubleQuote := false
+	escapeNext := false
+
+	for i := 0; i < len(input); i++ {
+		r := rune(input[i])
+		if escapeNext {
+			current.WriteRune(r)
+			escapeNext = false
+			continue
+		}
+
+		if r == '\\' {
+			current.WriteRune(r)
+			escapeNext = true
+			continue
+		}
+
+		if r == '\'' && !inDoubleQuote {
+			inSingleQuote = !inSingleQuote
+		} else if r == '"' && !inSingleQuote {
+			inDoubleQuote = !inDoubleQuote
+		}
+
+		current.WriteRune(r)
+
+		if r == ';' && !inSingleQuote && !inDoubleQuote {
+			stmt := strings.TrimSpace(current.String())
+			if stmt != "" {
+				statements = append(statements, stmt)
+			}
+			current.Reset()
+		}
+	}
+
+	stmt := strings.TrimSpace(current.String())
+	if stmt != "" {
+		statements = append(statements, stmt)
+	}
+
+	return statements
 }

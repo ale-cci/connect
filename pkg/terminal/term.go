@@ -599,6 +599,11 @@ type State struct {
 	termios unix.Termios
 }
 
+func IsTerminal(fd int) bool {
+	_, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
+	return err == nil
+}
+
 func MakeRaw(fd int) (*State, error) {
 	termios, err := unix.IoctlGetTermios(fd, ioctlReadTermios)
 	if err != nil {
