@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -107,12 +108,6 @@ func TestCheckDatabaseInvalidDriver(t *testing.T) {
 }
 
 func TestCheckDatabaseWithValidTunnel(t *testing.T) {
-	// Temporarily discard slog output to avoid log noise from asynchronous cleanup
-	importSlog := true
-	_ = importSlog
-	// We can import log/slog if needed, but wait, we can just use slog.SetDefault
-	// let's add "log/slog" to imports and use slog.SetDefault
-
 	dbListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -348,5 +343,54 @@ func TestCheckDatabaseTunnelInvalidFormat(t *testing.T) {
 	}
 	if res.Err == nil || !strings.Contains(res.Err.Error(), "invalid tunnel configuration") {
 		t.Errorf("expected 'invalid tunnel configuration' error, got %v", res.Err)
+	}
+}
+
+func TestRunHealthcheckReporting(t *testing.T) {
+	// A config with invalid database definitions so they fail immediately but report predictably
+	config := pkg.Config{
+		Credentials: map[string]pkg.User{
+			"my-user": {Username: "root", Password: "pwd"},
+		},
+		Databases: map[string]pkg.ConnectionInfo{
+			"db-b": {
+				Host:      "127.0.0.1",
+				Port:      3306,
+				UserAlias: "my-user",
+				Database:  "mydb",
+				Driver:    "unknown-driver",
+			},
+			"db-a": {
+				Host:      "127.0.0.1",
+				Port:      3306,
+				UserAlias: "my-user",
+				Database:  "mydb",
+				Driver:    "unknown-driver",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	err := RunHealthcheck(config, &buf)
+
+	if err == nil {
+		t.Error("expected error due to failures")
+	}
+
+	output := buf.String()
+
+	// Verify order is alphabetical
+	idxA := strings.Index(output, "db-a")
+	idxB := strings.Index(output, "db-b")
+
+	if idxA == -1 || idxB == -1 {
+		t.Error("missing databases in report output")
+	}
+	if idxA > idxB {
+		t.Error("databases are not sorted alphabetically in report")
+	}
+
+	if !strings.Contains(output, "Summary: 0 passed, 2 failed, 0 skipped.") {
+		t.Errorf("unexpected summary text: %s", output)
 	}
 }
