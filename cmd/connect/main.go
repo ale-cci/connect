@@ -62,6 +62,14 @@ func main() {
 		os.Exit(0)
 	}
 
+	if alias == "--healthcheck" {
+		err := RunHealthcheck(config, os.Stdout)
+		if err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	info, ok := config.Databases[alias]
 	if !ok {
 		slog.Error("Alias not found in config file", "alias", alias)
