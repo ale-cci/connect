@@ -2,11 +2,11 @@ package main
 
 import (
 	"flag"
-	"strings"
-	"net"
-	"log/slog"
-	"os"
 	"fmt"
+	"log/slog"
+	"net"
+	"os"
+	"strings"
 
 	"codeberg.org/ale-cci/connect/pkg"
 )
@@ -35,7 +35,6 @@ func main() {
 		os.Exit(1)
 	}
 
-
 	sshuser := chunks[0]
 	sshaddr := chunks[1]
 	if !strings.ContainsRune(sshaddr, ':') {
@@ -44,10 +43,9 @@ func main() {
 
 	slog.Info("starting tunnel on", "addr", local, "ssh-user", sshuser, "ssh-addr", sshaddr)
 
-
 	pkg.TunnelInfo{
-		User:    sshuser,
-		SshAddr: sshaddr,
+		User:       sshuser,
+		SshAddr:    sshaddr,
 		RemoteAddr: remote,
 		Agent:      agent,
 	}.Start(localConn)

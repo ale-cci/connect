@@ -1,11 +1,11 @@
 package terminal
 
 import (
-	"fmt"
-	"strings"
-	"io"
 	"bufio"
 	"encoding/base64"
+	"fmt"
+	"io"
+	"strings"
 )
 
 type History struct {
@@ -48,11 +48,10 @@ func (h *History) Add(s string) {
 
 	// trim history
 	if h.Size > 0 {
-		start := max(len(h.Strings) - h.Size, 0)
+		start := max(len(h.Strings)-h.Size, 0)
 		h.Strings = h.Strings[start:]
 	}
 }
-
 
 func (h *History) Search(s string) (string, error) {
 	// search back
@@ -84,5 +83,5 @@ func (h *History) Load(fd io.Reader) {
 			h.Add(string(cmd))
 		}
 	}
-	
+
 }

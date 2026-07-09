@@ -65,7 +65,7 @@ func checkDatabase(ctx context.Context, alias string, info pkg.ConnectionInfo, c
 		go pkg.TunnelInfo{
 			User:       values[0],
 			SshAddr:    sshAddr,
-			RemoteAddr: fmt.Sprintf("%s:%d", info.Host, info.Port),
+			RemoteAddr: net.JoinHostPort(info.Host, fmt.Sprintf("%d", info.Port)),
 			Agent:      agent,
 		}.Start(listener)
 

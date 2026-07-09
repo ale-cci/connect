@@ -57,7 +57,7 @@ func TestHistorySavesOnFile(t *testing.T) {
 	for i, tc := range tt {
 		t.Run(
 			fmt.Sprintf("TestHistorySavesOnFile[%d]", i),
-			func (t *testing.T) {
+			func(t *testing.T) {
 				h := terminal.History{}
 				for _, cmd := range tc.commands {
 					h.Add(cmd)

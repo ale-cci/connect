@@ -208,7 +208,7 @@ func TestCheckDatabaseWithValidTunnel(t *testing.T) {
 					}
 
 					// Connect to database port (mock database server)
-					destConn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", payload.DestAddr, payload.DestPort))
+					destConn, err := net.Dial("tcp", net.JoinHostPort(payload.DestAddr, fmt.Sprintf("%d", payload.DestPort)))
 					if err != nil {
 						newChan.Reject(ssh.ConnectionFailed, "dial failed")
 						continue

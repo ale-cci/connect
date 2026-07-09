@@ -159,19 +159,19 @@ func TestHistoryRetrieval(t *testing.T) {
 		input   string
 		backs   int
 		expect  string
-	} {
+	}{
 		{
-			history: []string{ "flast;", "first;" },
-			input: "f",
-			backs: 0,
-			expect: "first;",
+			history: []string{"flast;", "first;"},
+			input:   "f",
+			backs:   0,
+			expect:  "first;",
 		},
 	}
 
 	for idx, tc := range tt {
 		t.Run(
 			fmt.Sprintf("TestHistoryRetrieval[%d]", idx),
-			func (t *testing.T) {
+			func(t *testing.T) {
 				output := bytes.Buffer{}
 				input := append([]byte{'\x12'}, []byte(tc.input)...)
 
@@ -181,9 +181,9 @@ func TestHistoryRetrieval(t *testing.T) {
 				}
 				// confirm & submit command
 				input = append(input, '\r', '\r')
-				
+
 				term := terminal.Terminal{
-					Input: *bufio.NewReader(bytes.NewBuffer(input)),
+					Input:  *bufio.NewReader(bytes.NewBuffer(input)),
 					Output: &output,
 				}
 				for _, h := range tc.history {

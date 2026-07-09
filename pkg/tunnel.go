@@ -13,21 +13,21 @@ import (
 )
 
 type Address struct {
-	Net string
+	Net  string
 	Addr string
 }
 
 func addrFromString(addr string) Address {
 	if strings.Contains(addr, "/") {
-		return Address { Net: "unix", Addr: addr }
+		return Address{Net: "unix", Addr: addr}
 	}
-	return Address { Net: "tcp",  Addr: addr }
+	return Address{Net: "tcp", Addr: addr}
 }
 
 type TunnelInfo struct {
 	User string
 
-	SshAddr string
+	SshAddr    string
 	RemoteAddr string
 	LocalAddr  string
 
@@ -50,8 +50,8 @@ func (t TunnelInfo) Start(listener net.Listener) {
 
 func (t TunnelInfo) forward(localConn net.Conn) error {
 	sshConfig := ssh.ClientConfig{
-		User: t.User,
-		Auth: []ssh.AuthMethod{t.Agent},
+		User:            t.User,
+		Auth:            []ssh.AuthMethod{t.Agent},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
@@ -65,22 +65,26 @@ func (t TunnelInfo) forward(localConn net.Conn) error {
 	remoteAddr := addrFromString(t.RemoteAddr)
 	remoteConn, err := srvConn.Dial(remoteAddr.Net, remoteAddr.Addr)
 	if err != nil {
+		srvConn.Close()
 		return fmt.Errorf("unable to connect to remote addr: %v", err)
 	}
 
 	copyBytes := func(writer, reader net.Conn) {
+		defer writer.Close()
+		defer reader.Close()
 		_, err := io.Copy(writer, reader)
 		if err != nil {
 			slog.Error("copy error", "err", err)
 		}
 	}
 
-	go copyBytes(localConn, remoteConn)
+	go func() {
+		defer srvConn.Close()
+		copyBytes(localConn, remoteConn)
+	}()
 	go copyBytes(remoteConn, localConn)
 	return nil
 }
-
-
 
 func AuthAgent() (ssh.AuthMethod, error) {
 	conn, err := net.Dial("unix", os.Getenv("SSH_AUTH_SOCK"))
@@ -93,4 +97,3 @@ func AuthAgent() (ssh.AuthMethod, error) {
 	}
 	return ssh.PublicKeysCallback(client.Signers), nil
 }
-
